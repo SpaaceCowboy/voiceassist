@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #09090b;
+    --foreground: #fafafa;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+:root {
+  /* surfaces */
+  --bg: 248 250 252; /* slate-50-ish */
+  --surface: 255 255 255; /* cards */
+  --surface2: 245 246 248; /* headers/panels */
+  --border: 226 232 240; /* slate-200 */
+  --text: 15 23 42; /* slate-900 */
+  --muted: 100 116 139; /* slate-500 */
+
+  /* accent (Electric Violet) */
+  --accent: 139 92 246; /* violet-500 */
+  --accent2: 167 139 250; /* violet-400 */
+}
+
+html.dark {
+  --bg: 11 15 20; /* deep graphite */
+  --surface: 15 20 27; /* dark card */
+  --surface2: 19 25 33; /* dark header/panel */
+  --border: 42 51 66; /* subtle border */
+  --text: 226 232 240; /* slate-200 */
+  --muted: 148 163 184; /* slate-400 */
+
+  --accent: 167 139 250; /* violet-400 */
+  --accent2: 196 181 253; /* violet-300 */
+}
+
+/* background */
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+}
+
+/* accent focus ring for all focusable elements */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--bg)), 0 0 0 4px rgb(var(--accent));
+}

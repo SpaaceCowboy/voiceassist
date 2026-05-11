@@ -1,0 +1,83 @@
+# docker-compose.yml
+
+services:
+  # 1. PostgreSQL Database Service (No changes here)
+  postgres:
+    image: postgres:16-alpine
+    container_name: neurospine-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 2. NEW: Redis Service
+  redis:
+    image: redis:7-alpine
+    container_name: neurospine-redis
+    volumes:
+      # This makes the redis data persistent
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 3. Backend API Service (Updated `depends_on`)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      target: deps
+    container_name: neurospine-backend
+    environment:
+      NODE_ENV: development
+    ports:
+      - "4001:3000"
+    env_file:
+      - ./.env
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis: # <-- ADDED DEPENDENCY
+        condition: service_healthy # <-- ADDED DEPENDENCY
+    restart: unless-stopped
+    # volumes:
+    #   - ./backend:/app
+    #   - /app/node_modules
+    # command: npm run dev
+
+  # 4. Frontend Web Service (No changes here)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: neurospine-frontend
+    environment:
+      BACKEND_BASE_URL: http://backend:3000
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev
+
+volumes:
+  postgres-data:
+  redis-data: # <-- ADDED VOLUME
+

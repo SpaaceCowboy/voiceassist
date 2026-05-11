@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+backend/dist/
+frontend/.next/
+frontend/out/
+frontend/build/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+*Zone.Identifier
+
+# Misc
+*.rar
+*.zip
+*.tar.gz
+.cache/
+.turbo/
+.vercel/
