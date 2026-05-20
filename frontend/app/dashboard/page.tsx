@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { backendGet } from "@/lib/backend";
+import { GlobalSearch } from "@/components/dashboard/GlobalSearch";
 
 type Envelope<T> = { success?: boolean; data?: T } | T;
 
@@ -89,6 +90,8 @@ export default function DashboardPage() {
           }
         />
       </Card>
+
+      <GlobalSearch />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Total Calls" value={loading ? "…" : c.total_calls} />

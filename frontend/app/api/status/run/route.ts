@@ -3,10 +3,9 @@ import { NextResponse } from "next/server";
 const BACKEND =
   process.env.BACKEND_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:4000";
 
-const STATUS_EMAIL =
-  process.env.STATUS_CHECK_EMAIL ?? "admin@neurospine.com";
-const STATUS_PASSWORD =
-  process.env.STATUS_CHECK_PASSWORD ?? "NeuroAdmin2026!";
+// Require env creds so we never hardcode secrets in the repo.
+const STATUS_EMAIL = process.env.STATUS_CHECK_EMAIL;
+const STATUS_PASSWORD = process.env.STATUS_CHECK_PASSWORD;
 
 type JsonValue =
   | string
@@ -31,7 +30,7 @@ async function check(
   name: string,
   method: string,
   path: string,
-  options?: { body?: string; token?: string }
+  options?: { body?: string; token?: string },
 ): Promise<CheckResult> {
   const url = `${BACKEND}${path}`;
   const start = Date.now();
@@ -81,33 +80,37 @@ async function check(
 export async function GET() {
   // 1. Login to get token for protected API checks
   let token: string | undefined;
-  const loginRes = await check(
-    "Auth Login",
-    "POST",
-    "/auth/login",
-    {
-      body: JSON.stringify({ email: STATUS_EMAIL, password: STATUS_PASSWORD }),
-    }
-  );
 
-  if (loginRes.ok && loginRes.preview && typeof loginRes.preview === "object") {
-    const data = loginRes.preview as { data?: { token?: string } };
-    token = data?.data?.token;
+  let loginRes: CheckResult;
+  if (!STATUS_EMAIL || !STATUS_PASSWORD) {
+    loginRes = {
+      name: "Auth Login",
+      method: "POST",
+      path: "/auth/login",
+      ok: false,
+      status: 500,
+      ms: 0,
+      preview: "Missing STATUS_CHECK_EMAIL / STATUS_CHECK_PASSWORD env vars",
+    };
+  } else {
+    loginRes = await check("Auth Login", "POST", "/auth/login", {
+      body: JSON.stringify({ email: STATUS_EMAIL, password: STATUS_PASSWORD }),
+    });
+
+    if (loginRes.ok && loginRes.preview && typeof loginRes.preview === "object") {
+      const data = loginRes.preview as { data?: { token?: string } };
+      token = data?.data?.token;
+    }
   }
 
   // 2. Auth checks (setup returns 403 if already done — that's ok)
-  const setupRes = await check(
-    "Auth Setup",
-    "POST",
-    "/auth/setup",
-    {
-      body: JSON.stringify({
-        fullName: "Status Check",
-        email: "status@check.local",
-        password: "StatusCheck123!",
-      }),
-    }
-  );
+  const setupRes = await check("Auth Setup", "POST", "/auth/setup", {
+    body: JSON.stringify({
+      fullName: "Status Check",
+      email: "status@check.local",
+      password: "StatusCheck123!",
+    }),
+  });
   const setupOk = setupRes.ok || setupRes.status === 403;
 
   // 3. Protected API checks (require token)
@@ -115,18 +118,49 @@ export async function GET() {
   const protectedChecks = token
     ? await Promise.all([
         check("Appointments List", "GET", "/api/appointments", authHeaders),
-        check("Appointment by ID", "GET", "/api/appointments/1", authHeaders),
+        check(
+          "Appointment by ID",
+          "GET",
+          "/api/appointments/1",
+          authHeaders,
+        ),
         check("Calls List", "GET", "/api/calls", authHeaders),
         check("FAQs List", "GET", "/api/faqs", authHeaders),
-        check("FAQ by ID", "GET", "/api/faqs/1", authHeaders),
-        check("Analytics Overview", "GET", "/api/analytics/overview", authHeaders),
-        check("Analytics Intents", "GET", "/api/analytics/intents", authHeaders),
-        check("Analytics Hourly", "GET", "/api/analytics/hourly", authHeaders),
-        check("Patient Search", "GET", "/api/patients/search?q=test", authHeaders),
+        check(
+          "Analytics Overview",
+          "GET",
+          "/api/analytics/overview",
+          authHeaders,
+        ),
+        check(
+          "Analytics Intents",
+          "GET",
+          "/api/analytics/intents",
+          authHeaders,
+        ),
+        check(
+          "Analytics Hourly",
+          "GET",
+          "/api/analytics/hourly",
+          authHeaders,
+        ),
+        check(
+          "Patient Search",
+          "GET",
+          "/api/patients/search?q=test",
+          authHeaders,
+        ),
         check("Patient by ID", "GET", "/api/patients/1", authHeaders),
       ])
     : [
-        { name: "API (auth required)", method: "GET", path: "/api/*", ok: false, ms: 0, preview: "Login failed — no token" } as CheckResult,
+        {
+          name: "API (auth required)",
+          method: "GET",
+          path: "/api/*",
+          ok: false,
+          ms: 0,
+          preview: "Login failed — no token",
+        } as CheckResult,
       ];
 
   const [serverCheck, healthCheck] = await Promise.all([

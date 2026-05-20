@@ -1,16 +1,17 @@
-export function Card({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+// Path: components/ui/Card.tsx
+import * as React from "react";
+
+type CardProps = React.HTMLAttributes<HTMLDivElement>;
+
+export function Card({ children, className = "", style, ...rest }: CardProps) {
   return (
     <div
-      className={`rounded-2xl border transition-transform duration-200 hover:-translate-y-0.5 ${className}`}
+      {...rest}
+      className={`rounded-2xl border ${className}`}
       style={{
         background: `rgb(var(--surface))`,
         borderColor: `rgb(var(--border))`,
+        ...(style ?? {}),
       }}
     >
       {children}

@@ -128,17 +128,26 @@ export function Nav() {
           <NavLink href="/dashboard" pathname={pathname}>
             Dashboard
           </NavLink>
+          <NavLink href="/users" pathname={pathname}>
+  Users
+</NavLink>
           <NavLink href="/appointments" pathname={pathname}>
             Appointments
           </NavLink>
           <NavLink href="/patients" pathname={pathname}>
             Patients
           </NavLink>
-          <NavLink href="/reservations" pathname={pathname}>
+          {/* <NavLink href="/appointments" pathname={pathname}>
             Reservations
-          </NavLink>
+          </NavLink> */}
           <NavLink href="/calls" pathname={pathname}>
             Calls
+          </NavLink>
+          <NavLink href="/analytics" pathname={pathname}>
+          Analytics
+          </NavLink>
+          <NavLink href="/sessions" pathname={pathname}>
+          Sessions
           </NavLink>
           <NavLink href="/faqs" pathname={pathname}>
             FAQs

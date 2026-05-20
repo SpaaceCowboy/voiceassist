@@ -1,25 +1,34 @@
+// Path: store/ui.ts
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-type SortDir = "asc" | "desc";
+export type ThemeMode = "light" | "dark";
+export type SidebarMode = "expanded" | "collapsed";
 
-type UIState = {
-  dateFrom?: string;
-  dateTo?: string;
-  status?: string;
+type UiState = {
+  theme: ThemeMode;
+  sidebar: SidebarMode;
 
-  sortField?: string;
-  sortDir: SortDir;
+  setTheme: (t: ThemeMode) => void;
+  toggleTheme: () => void;
 
-  setFilters: (p: Partial<Pick<UIState, "dateFrom" | "dateTo" | "status">>) => void;
-  setSort: (field: string) => void;
+  setSidebar: (v: SidebarMode) => void;
+  toggleSidebar: () => void;
 };
 
-export const useUIStore = create<UIState>((set, get) => ({
-  sortDir: "desc",
-  setFilters: (p) => set(p),
-  setSort: (field) => {
-    const { sortField, sortDir } = get();
-    if (sortField === field) set({ sortDir: sortDir === "asc" ? "desc" : "asc" });
-    else set({ sortField: field, sortDir: "asc" });
-  },
-}));
+export const useUiStore = create<UiState>()(
+  persist(
+    (set, get) => ({
+      theme: "dark",
+      sidebar: "expanded",
+
+      setTheme: (t) => set({ theme: t }),
+      toggleTheme: () => set({ theme: get().theme === "dark" ? "light" : "dark" }),
+
+      setSidebar: (v) => set({ sidebar: v }),
+      toggleSidebar: () =>
+        set({ sidebar: get().sidebar === "expanded" ? "collapsed" : "expanded" }),
+    }),
+    { name: "ui-store" },
+  ),
+);

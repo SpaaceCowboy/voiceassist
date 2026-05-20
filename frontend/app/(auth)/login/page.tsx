@@ -2,15 +2,25 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { login } from "@/lib/authApi";
 import { useAuthStore, type AuthState } from "@/store/auth";
 
+function safeNextPath(raw: string | null): string {
+  if (!raw) return "/dashboard";
+  if (!raw.startsWith("/")) return "/dashboard";
+  if (raw.startsWith("//")) return "/dashboard";
+  return raw;
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
+
   const user = useAuthStore((s: AuthState) => s.user);
   const hydrated = useAuthStore((s: AuthState) => s.hydrated);
 
@@ -21,9 +31,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (hydrated && user) {
-      router.replace("/dashboard");
+      router.replace(nextPath);
     }
-  }, [hydrated, user, router]);
+  }, [hydrated, user, router, nextPath]);
 
   async function onSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -31,7 +41,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await login(email.trim(), password);
-      router.replace("/dashboard");
+      router.replace(nextPath);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Login failed");
     } finally {

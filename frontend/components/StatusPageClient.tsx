@@ -1,5 +1,6 @@
 "use client";
 
+import { TableShell, THead, TH, TR, TD } from "@/components/ui/TableShell";
 import { useEffect, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -68,43 +69,45 @@ export function StatusPageClient() {
         />
       </Card>
 
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead style={{ background: "rgb(var(--surface2))" }}>
-            <tr>
-              <th className="text-left p-2">Endpoint</th>
-              <th className="text-left p-2">Method</th>
-              <th className="text-left p-2">Path</th>
-              <th className="text-left p-2">Status</th>
-              <th className="text-left p-2">Latency</th>
-              <th className="text-left p-2">Response Preview</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.checks.map((c) => (
-              <tr key={`${c.method}:${c.path}`} className="border-t align-top" style={{ borderColor: "rgb(var(--border))" }}>
-                <td className="p-2 font-medium">{c.name}</td>
-                <td className="p-2">{c.method}</td>
-                <td className="p-2 font-mono">{c.path}</td>
-                <td className="p-2">
-                  <Badge text={c.ok ? "OK" : "FAIL"} tone={c.ok ? "good" : "bad"} />
-                  {c.status != null ? <span className="text-xs ml-1" style={{ color: "rgb(var(--muted))" }}>{c.status}</span> : null}
-                  {c.error ? <div className="text-xs text-red-600 mt-1">{c.error}</div> : null}
-                </td>
-                <td className="p-2">{c.ms} ms</td>
-                <td className="p-2">
-                  <pre
-                    className="text-xs p-2 rounded max-h-40 overflow-auto"
-                    style={{ background: "rgb(var(--surface2))" }}
-                  >
-                    {JSON.stringify(c.preview ?? null, null, 2)}
-                  </pre>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      <TableShell>
+  <THead>
+    <tr>
+      <TH>Endpoint</TH>
+      <TH>Method</TH>
+      <TH>Path</TH>
+      <TH>Status</TH>
+      <TH>Latency</TH>
+      <TH>Response Preview</TH>
+    </tr>
+  </THead>
+  <tbody>
+    {data.checks.map((c) => (
+      <TR key={`${c.method}:${c.path}`} className="align-top">
+        <TD className="font-medium">{c.name}</TD>
+        <TD>{c.method}</TD>
+        <TD className="font-mono">{c.path}</TD>
+        <TD>
+          <Badge text={c.ok ? "OK" : "FAIL"} tone={c.ok ? "good" : "bad"} />
+          {c.status != null ? (
+            <span className="text-xs ml-1" style={{ color: "rgb(var(--muted))" }}>
+              {c.status}
+            </span>
+          ) : null}
+          {c.error ? <div className="text-xs text-red-600 mt-1">{c.error}</div> : null}
+        </TD>
+        <TD>{c.ms} ms</TD>
+        <TD>
+          <pre
+            className="text-xs p-2 rounded max-h-40 overflow-auto"
+            style={{ background: "rgb(var(--surface2))" }}
+          >
+            {JSON.stringify(c.preview ?? null, null, 2)}
+          </pre>
+        </TD>
+      </TR>
+    ))}
+  </tbody>
+</TableShell>
     </div>
   );
 }

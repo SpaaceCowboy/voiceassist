@@ -1,5 +1,7 @@
 "use client";
 
+import { type RefObject } from "react";
+
 export function Input({
   value,
   onChange,
@@ -7,6 +9,7 @@ export function Input({
   className = "",
   disabled = false,
   type = "text",
+  inputRef,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -14,9 +17,11 @@ export function Input({
   className?: string;
   disabled?: boolean;
   type?: "text" | "email" | "password";
+  inputRef?: RefObject<HTMLInputElement>;
 }) {
   return (
     <input
+      ref={inputRef}
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
