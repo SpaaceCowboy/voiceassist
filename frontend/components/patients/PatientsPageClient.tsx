@@ -1,8 +1,7 @@
 // Path: components/patients/PatientsPageClient.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ErrorCard } from "@/components/ui/ErrorCard";
 import { usePatientsStore } from "@/store/patients";
@@ -10,9 +9,15 @@ import { PatientsFiltersBar } from "./list/PatientsFiltersBar";
 import { PatientsTable } from "./list/PatientsTable";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
+function readSearchFromLocation(): string {
+  if (typeof window === "undefined") return "";
+  const sp = new URLSearchParams(window.location.search);
+  return sp.get("search")?.trim() ?? "";
+}
+
 export default function PatientsPageClient() {
-  const searchParams = useSearchParams();
   const appliedSearchParam = useRef(false);
+  const [searchParam, setSearchParam] = useState<string>("");
 
   const {
     q,
@@ -28,14 +33,18 @@ export default function PatientsPageClient() {
     refresh,
   } = usePatientsStore();
 
-  // Apply ?search= exactly once
+  // Read ?search= client-side (avoids useSearchParams build/Suspense constraints)
+  useEffect(() => {
+    setSearchParam(readSearchFromLocation());
+  }, []);
+
+  // Apply it exactly once
   useEffect(() => {
     if (appliedSearchParam.current) return;
-    const sp = searchParams.get("search")?.trim();
-    if (sp) setQuery(sp);
+    if (searchParam) setQuery(searchParam);
     appliedSearchParam.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParam]);
 
   const qDebounced = useDebouncedValue(q, 300);
 

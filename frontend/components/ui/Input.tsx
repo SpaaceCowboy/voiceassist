@@ -17,7 +17,8 @@ export function Input({
   className?: string;
   disabled?: boolean;
   type?: "text" | "email" | "password";
-  inputRef?: RefObject<HTMLInputElement>;
+  // allow refs created with useRef<HTMLInputElement | null>(null)
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   return (
     <input

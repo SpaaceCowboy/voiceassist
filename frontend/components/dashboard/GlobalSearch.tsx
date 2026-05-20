@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
@@ -46,7 +46,7 @@ function clip(text: string, max = 120): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
-function highlight(text: string, q: string): JSX.Element {
+function highlight(text: string, q: string): ReactNode {
   const t = text ?? "";
   const nq = norm(q);
   if (!nq) return <>{t}</>;
@@ -116,7 +116,7 @@ function groupCard(
   items: ResultItem[],
   q: string,
   viewAllHref?: string,
-): JSX.Element {
+): ReactNode {
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between">
@@ -216,7 +216,10 @@ export function GlobalSearch() {
 
       // ignore while typing in inputs/textareas unless it's Esc
       const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
-      const typing = tag === "input" || tag === "textarea" || (e.target as HTMLElement | null)?.isContentEditable;
+      const typing =
+        tag === "input" ||
+        tag === "textarea" ||
+        (e.target as HTMLElement | null)?.isContentEditable;
 
       if (e.key === "Escape") {
         if (q.trim()) {
@@ -448,7 +451,12 @@ export function GlobalSearch() {
 
   const visible = useMemo(() => {
     if (group === "appointments")
-      return { appointments: raw.appointments, calls: [], patients: [], faqs: [] };
+      return {
+        appointments: raw.appointments,
+        calls: [],
+        patients: [],
+        faqs: [],
+      };
     if (group === "calls")
       return { appointments: [], calls: raw.calls, patients: [], faqs: [] };
     if (group === "patients")
@@ -459,10 +467,18 @@ export function GlobalSearch() {
   }, [group, raw]);
 
   const viewAll = {
-    appointments: qDebounced.trim() ? `/appointments?search=${encodeURIComponent(qDebounced.trim())}` : "/appointments",
-    calls: qDebounced.trim() ? `/calls?search=${encodeURIComponent(qDebounced.trim())}` : "/calls",
-    patients: qDebounced.trim() ? `/patients?search=${encodeURIComponent(qDebounced.trim())}` : "/patients",
-    faqs: qDebounced.trim() ? `/faqs?search=${encodeURIComponent(qDebounced.trim())}` : "/faqs",
+    appointments: qDebounced.trim()
+      ? `/appointments?search=${encodeURIComponent(qDebounced.trim())}`
+      : "/appointments",
+    calls: qDebounced.trim()
+      ? `/calls?search=${encodeURIComponent(qDebounced.trim())}`
+      : "/calls",
+    patients: qDebounced.trim()
+      ? `/patients?search=${encodeURIComponent(qDebounced.trim())}`
+      : "/patients",
+    faqs: qDebounced.trim()
+      ? `/faqs?search=${encodeURIComponent(qDebounced.trim())}`
+      : "/faqs",
   };
 
   return (
@@ -565,9 +581,7 @@ export function GlobalSearch() {
           </div>
         ) : null}
 
-        {qDebounced.trim().length >= 2 &&
-        !loading &&
-        totalCount === 0 ? (
+        {qDebounced.trim().length >= 2 && !loading && totalCount === 0 ? (
           <div className="mt-3 text-sm" style={{ color: "rgb(var(--muted))" }}>
             No results.
           </div>
@@ -577,13 +591,23 @@ export function GlobalSearch() {
       {qDebounced.trim().length >= 2 ? (
         <div className="grid lg:grid-cols-2 gap-3">
           {group === "all" || group === "appointments"
-            ? groupCard("Appointments", visible.appointments, qDebounced, viewAll.appointments)
+            ? groupCard(
+                "Appointments",
+                visible.appointments,
+                qDebounced,
+                viewAll.appointments,
+              )
             : null}
           {group === "all" || group === "calls"
             ? groupCard("Calls", visible.calls, qDebounced, viewAll.calls)
             : null}
           {group === "all" || group === "patients"
-            ? groupCard("Patients", visible.patients, qDebounced, viewAll.patients)
+            ? groupCard(
+                "Patients",
+                visible.patients,
+                qDebounced,
+                viewAll.patients,
+              )
             : null}
           {group === "all" || group === "faqs"
             ? groupCard("FAQs", visible.faqs, qDebounced, viewAll.faqs)

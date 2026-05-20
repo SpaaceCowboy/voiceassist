@@ -1,8 +1,7 @@
 // Path: components/appointments/AppointmentsPageClient.tsx
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ErrorCard } from "@/components/ui/ErrorCard";
 import { useAppointmentsStore } from "@/store/appointments";
@@ -38,9 +37,15 @@ function apptSearchParts(a: Appointment): string[] {
   ];
 }
 
+function readSearchFromLocation(): string {
+  if (typeof window === "undefined") return "";
+  const sp = new URLSearchParams(window.location.search);
+  return sp.get("search")?.trim() ?? "";
+}
+
 export default function AppointmentsPageClient() {
-  const searchParams = useSearchParams();
   const appliedSearchParam = useRef(false);
+  const [searchParam, setSearchParam] = useState<string>("");
 
   const {
     scope,
@@ -62,16 +67,18 @@ export default function AppointmentsPageClient() {
     refresh,
   } = useAppointmentsStore();
 
-  // Apply ?search= exactly once (so it doesn't fight user typing)
+  // Read ?search= client-side (avoids useSearchParams build/Suspense constraints)
+  useEffect(() => {
+    setSearchParam(readSearchFromLocation());
+  }, []);
+
+  // Apply it exactly once
   useEffect(() => {
     if (appliedSearchParam.current) return;
-    const sp = searchParams.get("search")?.trim();
-    if (sp) {
-      setQuery(sp);
-    }
+    if (searchParam) setQuery(searchParam);
     appliedSearchParam.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParam]);
 
   useEffect(() => {
     void refresh();

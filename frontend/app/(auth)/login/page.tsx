@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -16,18 +16,29 @@ function safeNextPath(raw: string | null): string {
   return raw;
 }
 
+function readNextFromLocation(): string {
+  if (typeof window === "undefined") return "/dashboard";
+  const sp = new URLSearchParams(window.location.search);
+  return safeNextPath(sp.get("next"));
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const nextPath = safeNextPath(searchParams.get("next"));
 
   const user = useAuthStore((s: AuthState) => s.user);
   const hydrated = useAuthStore((s: AuthState) => s.hydrated);
+
+  const [nextPath, setNextPath] = useState<string>("/dashboard");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // read query param on client only (avoids Next.js Suspense requirement)
+    setNextPath(readNextFromLocation());
+  }, []);
 
   useEffect(() => {
     if (hydrated && user) {
