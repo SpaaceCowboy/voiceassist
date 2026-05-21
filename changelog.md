@@ -2,6 +2,16 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-05-21 — LOW backend audit sweep
+
+- **Deleted internal docs from repo** — removed `backend/BUGFIX_REPORT.md` and `backend/test.md`. Audit history belongs in PRs/changelog, not shipped.
+- **Validated `/api/sessions/cleanup` `hours` query** — `backend/src/routes/api.ts:978`. Now requires `1 ≤ hours ≤ 8760` (one year), falls back to 24 on non-finite or out-of-range input. Prevents a moderator accidentally passing `hours=0` (wipe everything) or a negative.
+- **Fixed "Transfering" typo + capitalization** — `backend/src/routes/twilio.ts:366`. Caller-facing TTS now says "Transferring you now. Please hold."
+- **Removed unused `notes` param in `handleTransfer`** — `backend/src/services/conversation.ts:689`. Was declared and never used; tool schema can keep `notes` since the LLM may still emit it harmlessly.
+- **`inputys` typo** — not found in source (already corrected at some point); dropped from pending list.
+
+Verified: `npm run typecheck` clean.
+
 ## 2026-05-21 — MEDIUM backend audit fixes
 
 - **Date BETWEEN bugs fixed** — `backend/src/models/callLog.ts`. All five queries (`findRecent`, `findTransferredCalls`, `findCallsWithErrors`, `getStats` aggregate + intent + hourly + sentiment) now use `started_at >= $1::date AND started_at < ($2::date + INTERVAL '1 day')` so same-day end-date calls are included.

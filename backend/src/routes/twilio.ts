@@ -363,7 +363,7 @@ async function transferCall(callSid: string): Promise<void> {
   
 try {
   const twiml = new twilio.twiml.VoiceResponse();
-  twiml.say({ voice: 'Polly.Joanna'}, 'Transfering you now. please hold');
+  twiml.say({ voice: 'Polly.Joanna'}, 'Transferring you now. Please hold.');
   twiml.dial(transferNumber);
 
   await getTwilioClient().calls(callSid).update({

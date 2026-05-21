@@ -687,7 +687,6 @@ async function handleTransfer(
   args: Record<string, unknown>
 ): Promise<FunctionExecutionResult> {
   const reason = String(args.reason);
-  const notes = args.notes ? String(args.notes) : undefined;
 
   await callLogModel.markTransferred(callSid, reason);
 

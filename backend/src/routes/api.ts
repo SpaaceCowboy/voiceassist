@@ -975,7 +975,8 @@ router.post(
   '/sessions/cleanup',
   requireRole('moderator'),
   asyncHandler(async (req: Request, res: Response) => {
-    const olderThanHours = parseInt(req.query.hours as string) || 24;
+    const parsed = parseInt(req.query.hours as string);
+    const olderThanHours = Number.isFinite(parsed) && parsed >= 1 && parsed <= 8760 ? parsed : 24;
     const deletedCount = await sessionModel.deleteOldSessions(olderThanHours);
     res.json({ success: true, data: { deletedCount, olderThanHours } });
   })
