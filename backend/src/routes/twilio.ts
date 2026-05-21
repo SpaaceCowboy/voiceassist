@@ -8,6 +8,7 @@ import twilio from 'twilio'
 import { WebSocket, WebSocketServer } from 'ws'
 import conversationService from '../services/conversation'
 import deepgramService from '../services/deepgram'
+import redis from '../config/redis'
 import logger from '../utils/logger'
 import type {
     TwilioVoiceRequest,
@@ -217,9 +218,26 @@ export function setupMediaStreamWebSocket(server: Server): void {
               // Extract call metadata
               callSid = data.start?.customParameters?.callSid || data.start?.callSid || null;
               streamSid = data.start?.streamSid || null;
-              
+
+              // Authenticate: a Redis session must exist for this callSid,
+              // created by the Twilio-signature-validated /voice webhook.
+              // Without this check, anyone can open a stream and burn credits.
+              if (!callSid) {
+                logger.warn('Media stream start without callSid — closing');
+                ws.close(1008, 'missing callSid');
+                return;
+              }
+              {
+                const session = await redis.getSession(callSid);
+                if (!session) {
+                  logger.warn('Media stream start with unknown callSid — closing', { callSid });
+                  ws.close(1008, 'unauthorized');
+                  return;
+                }
+              }
+
               logger.info('Media stream started', { callSid, streamSid });
-              
+
               // Initialize Deepgram for transcription
               deepgramController = deepgramService.createLiveTranscription({
                 onTranscript: async (text: string, confidence: number) => {

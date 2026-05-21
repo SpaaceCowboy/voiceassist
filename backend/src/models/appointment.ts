@@ -257,14 +257,38 @@ export async function findUpcomingByPatient(
     return result.rows;
   }
 
-// list all reservations, optionally filtered by date
-export async function findAll(date?: string): Promise<Appointment[]> {
-    const where: string[] = [`a.status NOT IN ('cancelled')`];
+// list appointments, optionally filtered by date/status, with paging
+export async function findAll(opts: {
+  date?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<Appointment[]> {
+    const where: string[] = [];
     const params: unknown[] = [];
-    if (date) {
-      params.push(date);
+
+    if (opts.status) {
+      params.push(opts.status);
+      where.push(`a.status = $${params.length}`);
+    } else {
+      where.push(`a.status NOT IN ('cancelled')`);
+    }
+
+    if (opts.date) {
+      params.push(opts.date);
       where.push(`a.appointment_date = $${params.length}`);
     }
+
+    let limitClause = '';
+    if (typeof opts.limit === 'number') {
+      params.push(opts.limit);
+      limitClause += ` LIMIT $${params.length}`;
+    }
+    if (typeof opts.offset === 'number') {
+      params.push(opts.offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
     const result = await db.query<Appointment>(
       `SELECT a.*,
          p.full_name AS patient_name, p.phone AS patient_phone,
@@ -277,7 +301,7 @@ export async function findAll(date?: string): Promise<Appointment[]> {
        LEFT JOIN departments dep ON a.department_id = dep.id
        LEFT JOIN locations l ON a.location_id = l.id
        WHERE ${where.join(' AND ')}
-       ORDER BY a.appointment_date DESC, a.appointment_time`,
+       ORDER BY a.appointment_date DESC, a.appointment_time${limitClause}`,
       params
     );
     return result.rows;

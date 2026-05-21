@@ -24,7 +24,7 @@ export async function findMatch(question: string): Promise<FAQ | null> {
   );
   
   if (patternResult.rows.length > 0) {
-    await incrementUsageCount(patternResult.rows[0].id);
+    void incrementUsageCount(patternResult.rows[0].id);
     return patternResult.rows[0];
   }
   
@@ -42,7 +42,7 @@ export async function findMatch(question: string): Promise<FAQ | null> {
   );
   
   if (variationsResult.rows.length > 0) {
-    await incrementUsageCount(variationsResult.rows[0].id);
+    void incrementUsageCount(variationsResult.rows[0].id);
     return variationsResult.rows[0];
   }
   
@@ -66,7 +66,7 @@ export async function findMatch(question: string): Promise<FAQ | null> {
     );
     
     if (keywordResult.rows.length > 0) {
-      await incrementUsageCount(keywordResult.rows[0].id);
+      void incrementUsageCount(keywordResult.rows[0].id);
       return keywordResult.rows[0];
     }
   }
@@ -234,12 +234,15 @@ export async function deactivate(id: number): Promise<void> {
  * Increment usage count for an FAQ
  */
 export async function incrementUsageCount(id: number): Promise<void> {
-  await db.query(
-    `UPDATE faq_responses 
-     SET times_used = times_used + 1, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1`,
-    [id]
-  );
+  // Don't touch updated_at — analytics counter, not a content change.
+  try {
+    await db.query(
+      `UPDATE faq_responses SET times_used = times_used + 1 WHERE id = $1`,
+      [id]
+    );
+  } catch (err) {
+    logger.warn('FAQ usage increment failed', { id, err });
+  }
 }
 
 /**

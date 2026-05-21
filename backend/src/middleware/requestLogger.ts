@@ -10,7 +10,9 @@ export const requestLogger = (
 
   res.on('finish', () => {
     const durationMs = Date.now() - startTime;
-    logger.request(req.method, req.originalUrl, res.statusCode, durationMs);
+    // Log path only — req.originalUrl includes the query string, which can
+    // leak tokens or PHI if a caller ever passes them as query params.
+    logger.request(req.method, req.path, res.statusCode, durationMs);
   });
 
   next();

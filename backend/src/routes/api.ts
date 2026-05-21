@@ -2,7 +2,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { patientModel, callLogModel, faqModel, appointmentModel, sessionModel } from '../models';
-import { getCurrentDate, formatDate } from '../utils/helpers';
+import { getCurrentDate, formatDate, validateAppointment } from '../utils/helpers';
 import database from '../config/database';
 import redis from '../config/redis';
 import logger from '../utils/logger';
@@ -26,12 +26,14 @@ import type { ApiResponse, PaginatedResponse } from '../../types/index';
 
 const router = Router();
 
-// Async handler wrapper
-function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+// Async handler wrapper. Handlers mounted after `router.use(authenticate)` see
+// an `AuthenticatedRequest` (with `req.user` populated); the generic param lets
+// individual routes opt into that stricter type without forcing a cast.
+function asyncHandler<Req extends Request = AuthenticatedRequest>(
+  fn: (req: Req, res: Response, next: NextFunction) => Promise<void>
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+    Promise.resolve(fn(req as Req, res, next)).catch(next);
   };
 }
 
@@ -191,10 +193,19 @@ router.get(
   '/appointments',
   validateQuery(appointmentQuerySchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { date } = req.query;
+    const { date, status, limit, offset } = req.query as {
+      date?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    };
 
-    const dateFilter = typeof date === 'string' && date ? date : undefined;
-    const appointments = await appointmentModel.findAll(dateFilter);
+    const appointments = await appointmentModel.findAll({
+      date: date && date.length > 0 ? date : undefined,
+      status,
+      limit,
+      offset,
+    });
 
     const response: PaginatedResponse<(typeof appointments)[0]> = {
       success: true,
@@ -324,6 +335,29 @@ router.patch(
     if (id === null) return;
     const updates = req.body;
 
+    // If the caller is changing the schedule (date and/or time), validate the
+    // resulting date+time against business rules (no past dates, weekends,
+    // out-of-hours). Fall back to the existing appointment for the field that
+    // isn't being changed.
+    if (updates.date || updates.time) {
+      const existing = await appointmentModel.findById(id);
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Appointment not found' });
+        return;
+      }
+      const rawDate = existing.appointment_date as unknown;
+      const existingDate = rawDate instanceof Date
+        ? formatDate(rawDate)
+        : String(rawDate);
+      const newDate = updates.date ?? existingDate;
+      const newTime = updates.time ?? String(existing.appointment_time).slice(0, 5);
+      const check = validateAppointment(newDate, newTime);
+      if (!check.valid) {
+        res.status(400).json({ success: false, error: check.error });
+        return;
+      }
+    }
+
     const appointment = await appointmentModel.modify(id, {
       date: updates.date,
       time: updates.time,
@@ -442,7 +476,7 @@ router.get(
   validateQuery(patientSearchSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { q, limit = '20' } = req.query;
-    const query = typeof q === 'string' ? q : '';
+    const query = (q as string).trim();
 
     const patients = await patientModel.search(query, parseInt(limit as string));
 

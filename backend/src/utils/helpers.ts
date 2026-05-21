@@ -7,6 +7,20 @@
 /** Parse natural language dates into YYYY-MM-DD format. */
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Parse a YYYY-MM-DD string as a local-time Date (midnight in the server's
+ * timezone). Avoids `new Date('2026-05-13')` which treats the string as UTC
+ * and shifts the day in non-UTC zones.
+ */
+function parseLocalDate(dateStr: string): Date {
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  return new Date(dateStr);
+}
+
 export function parseDate(dateStr: string): string | null {
   const input = dateStr.toLowerCase().trim();
   const today = new Date();
@@ -64,7 +78,7 @@ export function parseDate(dateStr: string): string | null {
   }
 
   // Standard date format
-  const parsed = new Date(dateStr);
+  const parsed = parseLocalDate(dateStr);
   if (!isNaN(parsed.getTime())) {
     return formatDate(parsed);
   }
@@ -121,9 +135,12 @@ export function parseTime(timeStr: string): string | null {
   return null;
 }
 
-/** Format a Date object to YYYY-MM-DD. */
+/** Format a Date object to YYYY-MM-DD in local time. */
 export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /** Format a Date object to HH:MM. */
@@ -143,7 +160,7 @@ export function getCurrentTime(): string {
 
 /** Check if a date is in the past. */
 export function isDateInPast(dateStr: string): boolean {
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return date < today;
@@ -152,7 +169,7 @@ export function isDateInPast(dateStr: string): boolean {
 /** Check if a time has already passed for a given date. */
 export function isTimeInPast(dateStr: string, timeStr: string): boolean {
   const [hours, minutes] = timeStr.split(':').map(Number);
-  const dateTime = new Date(dateStr);
+  const dateTime = parseLocalDate(dateStr);
   dateTime.setHours(hours, minutes, 0, 0);
   return dateTime < new Date();
 }
@@ -248,7 +265,7 @@ export function validateAppointment(
   }
 
   // Check if it's a weekend (Saturday = 6, Sunday = 0)
-  const appointmentDate = new Date(date);
+  const appointmentDate = parseLocalDate(date);
   const dayOfWeek = appointmentDate.getDay();
   if (dayOfWeek === 0 || dayOfWeek === 6) {
     return {

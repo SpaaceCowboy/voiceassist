@@ -12,10 +12,14 @@ export function validateTwilioWebhook(
     res: Response,
     next: NextFunction, 
 ): void {
+    // Skip path is gated on NODE_ENV being explicitly 'development'.
+    // NODE_ENV must be set at startup (enforced in server.ts), so an unset
+    // NODE_ENV cannot accidentally enable this branch.
     if (
         process.env.NODE_ENV === 'development' &&
         process.env.SKIP_TWILIO_VALIDATION === 'true'
     ) {
+        logger.warn('Twilio signature validation SKIPPED (development + SKIP_TWILIO_VALIDATION=true)');
         return next();
     }
 

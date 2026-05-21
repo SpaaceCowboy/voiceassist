@@ -97,22 +97,13 @@ export async function generateGreeting(callSid: string): Promise<GreetingRespons
   if (patient?.full_name && appointments.length > 0) {
     // Returning customer with upcoming reservation
     const nextRes = appointments[0];
-    greeting = `Hello ${patient.full_name}! 
-    Thank you for calling ${businessName}. 
-    I see you have a appointment coming up on 
-    ${formatDateForSpeech(nextRes.appointment_date)} at
-     ${formatTimeForDisplay(nextRes.appointment_time)}. 
-    How can I help you today?`;
+    greeting = `Hello ${patient.full_name}! Thank you for calling ${businessName}. I see you have an appointment coming up on ${formatDateForSpeech(nextRes.appointment_date)} at ${formatTimeForDisplay(nextRes.appointment_time)}. How can I help you today?`;
   } else if (patient?.full_name) {
     // Returning customer without reservation
-    greeting = `Hello ${patient.full_name}! 
-    Thank you for calling ${businessName}. How can I help you today?`;
+    greeting = `Hello ${patient.full_name}! Thank you for calling ${businessName}. How can I help you today?`;
   } else {
     // New customer
-    greeting = `Thank you for calling ${businessName}
-    ! I'm your AI assistant and I 
-    can help you schedile an appointment or answer questions about our services, or connect you with our staff.
-     How can I help you today?`;
+    greeting = `Thank you for calling ${businessName}! I'm your AI assistant and I can help you schedule an appointment or answer questions about our services, or connect you with our staff. How can I help you today?`;
   }
   
   // Generate audio

@@ -65,6 +65,26 @@ PostgreSQL with migrations in `migrations/`. Key tables: `locations`, `departmen
 - Path aliases: `@config/*`, `@services/*`, `@models/*`, `@routes/*`, `@utils/*`, `@types/*` (baseUrl is `./src`)
 - Output to `dist/` with source maps and declarations
 
+## PHI / Data Retention
+
+The application handles Protected Health Information (PHI). Retention windows
+for stored conversation data:
+
+- **`conversation_sessions.message_history`** (Postgres): full transcript and
+  collected slot data for each call. Rows are marked `is_active = FALSE` when
+  the call ends. A scheduled job in `src/server.ts` runs every 6 hours and
+  deletes inactive sessions older than **24 hours** via
+  `sessionModel.deleteOldSessions(24)`. The `/api/sessions/cleanup` endpoint
+  (moderator-only) can trigger this on demand.
+- **Redis session state** (`session:{callSid}`): 1-hour TTL, set by Upstash.
+  Auto-expires; no manual cleanup required.
+- **`call_logs.transcript` / `summary`**: retained indefinitely for clinical
+  and audit purposes. Treat as PHI in any new code paths (no logging to stdout,
+  no external sinks without a BAA).
+
+When changing these windows, update this section *and* the constants in
+`src/server.ts` and `src/models/session.ts` together.
+
 ## Environment Variables
 
 Required in `.env`: `DATABASE_URL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `JWT_SECRET`

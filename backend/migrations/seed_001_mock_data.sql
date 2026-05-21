@@ -354,21 +354,8 @@ VALUES
 -- ===========================================
 -- 9. DASHBOARD USERS
 -- ===========================================
--- Password: NeuroAdmin2026! (bcrypt 12 rounds)
--- Hash generated with: bcrypt.hashSync('NeuroAdmin2026!', 12)
-
-INSERT INTO dashboard_users (email, password_hash, full_name, role, is_active) VALUES
-  ('admin@neurospine.com',
-   '$2b$12$t8oQzPVgpxGcJpuOdw2Lqu6b4W/WyRhWQqEOOcjIs0XaHQQB26hU2',
-   'Admin User',
-   'moderator',
-   true),
-  ('front.desk@neurospine.com',
-   '$2b$12$t8oQzPVgpxGcJpuOdw2Lqu6b4W/WyRhWQqEOOcjIs0XaHQQB26hU2',
-   'Front Desk',
-   'user',
-   true)
-ON CONFLICT (email) DO NOTHING;
+-- No seeded users. Create the first moderator via POST /auth/setup
+-- on a fresh deployment (route is locked once any user exists).
 
 COMMIT;
 

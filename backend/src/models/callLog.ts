@@ -173,7 +173,8 @@ export async function findRecent(
       `SELECT cl.*, c.full_name as patient_name
       FROM call_logs cl
       LEFT JOIN patients c ON cl.patient_id = c.id
-      WHERE cl.started_at BETWEEN $1 AND $2
+      WHERE cl.started_at >= $1::date
+        AND cl.started_at < ($2::date + INTERVAL '1 day')
       ORDER BY cl.started_at DESC
       LIMIT $3`,
      [startDate, endDate, limit]
@@ -191,7 +192,8 @@ export async function findTransferredCalls(
         FROM call_logs cl
         LEFT JOIN patients c ON cl.patient_id = c.id
         WHERE cl.was_transferred = true
-          AND cl.started_at BETWEEN $1 AND $2
+          AND cl.started_at >= $1::date
+          AND cl.started_at < ($2::date + INTERVAL '1 day')
         ORDER BY cl.started_at DESC`,
        [startDate, endDate]
     )
@@ -208,7 +210,8 @@ export async function findCallsWithErrors(
         FROM call_logs cl
         LEFT JOIN patients c ON cl.patient_id = c.id
         WHERE cl.error_message IS NOT NULL
-          AND cl.started_at BETWEEN $1 AND $2
+          AND cl.started_at >= $1::date
+          AND cl.started_at < ($2::date + INTERVAL '1 day')
         ORDER BY cl.started_at DESC`,
        [startDate, endDate]
     )
@@ -228,7 +231,8 @@ export async function getStats(
          COUNT(*) FILTER (WHERE was_transferred = true) as transferred_calls,
          COUNT(*) FILTER (WHERE error_message IS NOT NULL) as calls_with_errors
        FROM call_logs
-       WHERE started_at BETWEEN $1 AND $2`,
+       WHERE started_at >= $1::date
+         AND started_at < ($2::date + INTERVAL '1 day')`,
       [startDate, endDate]
     );
     
@@ -247,7 +251,8 @@ export async function getStats(
          COUNT(*) as count,
          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
        FROM call_logs
-       WHERE started_at BETWEEN $1 AND $2
+       WHERE started_at >= $1::date
+         AND started_at < ($2::date + INTERVAL '1 day')
          AND intent IS NOT NULL
        GROUP BY intent
        ORDER BY count DESC`,
@@ -268,7 +273,8 @@ export async function getStats(
          EXTRACT(HOUR FROM started_at) as hour,
          COUNT(*) as call_count
        FROM call_logs
-       WHERE started_at BETWEEN $1 AND $2
+       WHERE started_at >= $1::date
+         AND started_at < ($2::date + INTERVAL '1 day')
        GROUP BY hour
        ORDER BY hour`,
       [startDate, endDate]
@@ -288,7 +294,8 @@ export async function getStats(
          AVG(sentiment_score) as avg_sentiment,
          COUNT(*) as call_count
        FROM call_logs
-       WHERE started_at BETWEEN $1 AND $2
+       WHERE started_at >= $1::date
+         AND started_at < ($2::date + INTERVAL '1 day')
          AND sentiment_score IS NOT NULL
        GROUP BY DATE(started_at)
        ORDER BY date`,

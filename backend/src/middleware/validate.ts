@@ -178,7 +178,7 @@ export const patientUpdateSchema = z.object({
 );
 
 export const patientSearchSchema = z.object({
-  q: z.string().max(200).optional(),
+  q: z.string().min(1, 'Search query is required').max(200),
   limit: z
     .string()
     .regex(/^\d+$/)

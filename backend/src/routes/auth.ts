@@ -131,42 +131,50 @@ router.post(
   setupLimiter,
   validateBody(registerSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    // Check if any users exist
-    const countResult = await db.query<{ count: string }>(
-      'SELECT COUNT(*) FROM dashboard_users'
-    );
+    const { email, password, fullName } = req.body;
+    const normalizedEmail = email.toLowerCase();
 
-    const userCount = parseInt(countResult.rows[0].count);
+    // Hash password outside the transaction (bcrypt is CPU-bound).
+    const passwordHash = await bcrypt.hash(password, 12);
 
-    if (userCount > 0) {
+    // Serialize concurrent /auth/setup callers with a pg advisory lock so two
+    // requests can't both observe an empty users table and both create
+    // moderators. Lock key is an arbitrary constant unique to this endpoint.
+    const newUser = await db.transaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock($1)', [4711_0001]);
+
+      const countResult = await client.query<{ count: string }>(
+        'SELECT COUNT(*) FROM dashboard_users'
+      );
+      const userCount = parseInt(countResult.rows[0].count);
+
+      if (userCount > 0) {
+        return null;
+      }
+
+      const insertResult = await client.query<{
+        id: number;
+        email: string;
+        full_name: string;
+        role: DashboardUserRole;
+        created_at: Date;
+      }>(
+        `INSERT INTO dashboard_users (email, password_hash, full_name, role)
+         VALUES ($1, $2, $3, 'moderator')
+         RETURNING id, email, full_name, role, created_at`,
+        [normalizedEmail, passwordHash, fullName]
+      );
+
+      return insertResult.rows[0];
+    });
+
+    if (!newUser) {
       res.status(403).json({
         success: false,
         error: 'Setup already completed. Use /auth/login to sign in, or ask a moderator to create your account.',
       });
       return;
     }
-
-    const { email, password, fullName } = req.body;
-    const normalizedEmail = email.toLowerCase();
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    // Create the first moderator
-    const result = await db.query<{
-      id: number;
-      email: string;
-      full_name: string;
-      role: DashboardUserRole;
-      created_at: Date;
-    }>(
-      `INSERT INTO dashboard_users (email, password_hash, full_name, role)
-       VALUES ($1, $2, $3, 'moderator')
-       RETURNING id, email, full_name, role, created_at`,
-      [normalizedEmail, passwordHash, fullName]
-    );
-
-    const newUser = result.rows[0];
 
     // Auto-generate a token so they're immediately logged in
     const token = signToken(newUser.id, newUser.email, newUser.role);

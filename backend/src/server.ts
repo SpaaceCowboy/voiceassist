@@ -30,17 +30,21 @@ import logger from './utils/logger';
 // ENV VALIDATION
 // ===========================================
 
+// NODE_ENV must be set explicitly. An unset NODE_ENV used to be treated as
+// "development" in some branches, which let a misconfigured prod box silently
+// disable Twilio signature validation. Force the operator to choose.
+if (!process.env.NODE_ENV) {
+  logger.error('NODE_ENV must be set explicitly (e.g. "production" or "development")');
+  process.exit(1);
+}
+
 const requiredEnvVars = [
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'DEEPGRAM_API_KEY',
   'OPENAI_API_KEY',
+  'JWT_SECRET',
 ];
-
-// JWT_SECRET is required in production (for dashboard auth)
-if (process.env.NODE_ENV === 'production') {
-  requiredEnvVars.push('JWT_SECRET');
-}
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -56,12 +60,6 @@ if (!process.env.TWILIO_ACCOUNT_SID!.startsWith('AC')) {
       'Find your Account SID at https://console.twilio.com/'
   );
   process.exit(1);
-}
-
-// Default JWT_SECRET for development (override in .env!)
-if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = 'dev-secret-change-in-production';
-  logger.warn('JWT_SECRET not set — using default. Set it in .env for production!');
 }
 
 // ===========================================
@@ -81,10 +79,25 @@ app.use(
 // Trust proxy (for ngrok, load balancers — needed for Twilio sig validation)
 app.set('trust proxy', 1);
 
-// CORS
+// CORS — explicit allowlist via CORS_ORIGIN (comma-separated). Wildcard only
+// permitted in non-production to avoid leaking authenticated responses to
+// arbitrary origins (bearer tokens are sent via header, so `*` is not blocked
+// by the browser).
+const corsOriginEnv = process.env.CORS_ORIGIN?.trim();
+const corsAllowlist = corsOriginEnv
+  ? corsOriginEnv.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+
+if (process.env.NODE_ENV === 'production') {
+  if (corsAllowlist.length === 0 || corsAllowlist.includes('*')) {
+    logger.error('CORS_ORIGIN must be set to an explicit allowlist in production (no "*")');
+    process.exit(1);
+  }
+}
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: corsAllowlist.length > 0 ? corsAllowlist : '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
@@ -119,11 +132,14 @@ app.use('/twilio', validateTwilioWebhook, twilioRoutes);
 // Auth routes (public — login, protected — register, me)
 app.use('/auth', authRoutes);
 
-// Swagger docs (public)
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.get('/api/docs.json', (_req: Request, res: Response) => {
-  res.json(swaggerSpec);
-});
+// Swagger docs — exposed in non-production only. Set ENABLE_API_DOCS=true to
+// force-enable in production (e.g. behind a VPN).
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get('/api/docs.json', (_req: Request, res: Response) => {
+    res.json(swaggerSpec);
+  });
+}
 
 // API routes (JWT-protected — see middleware inside api.ts)
 app.use('/api', apiRoutes);
@@ -190,12 +206,11 @@ setupMediaStreamWebSocket(server);
 
 async function startServer(): Promise<void> {
   try {
-//    logger.info('Connecting to database...');
-//   const dbConnected = await database.testConnection();
-//    if (!dbConnected) {
-  //
-    //  throw new Error('Database connection failed');
-    //}
+    logger.info('Connecting to database...');
+    const dbConnected = await database.testConnection();
+    if (!dbConnected) {
+      throw new Error('Database connection failed');
+    }
 
     logger.info('Connecting to Redis...');
     await redis.connect();
@@ -285,6 +300,7 @@ process.on('uncaughtException', (error: Error) => {
 
 process.on('unhandledRejection', (reason: unknown) => {
   logger.error('Unhandled promise rejection', reason);
+  shutdown('unhandledRejection');
 });
 
 startServer();
