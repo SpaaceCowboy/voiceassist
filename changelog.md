@@ -2,6 +2,14 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-05-21 — FAQ usage count batching
+
+- **Buffered FAQ usage counts in-process** — `backend/src/models/faq.ts`. `incrementUsageCount(id)` is now synchronous and only bumps an in-memory `Map<id, delta>` — no DB I/O on the conversation hot path. Removes row-lock contention and WAL churn on popular FAQ rows that every matched call was updating.
+- **Added `flushUsageCounts()`** — bulk `UPDATE … FROM (VALUES …) AS v(id, delta)` drains the map in a single round-trip. On query failure the snapshot is re-merged into the pending map so counts aren't lost across a transient DB blip.
+- **Wired periodic + shutdown flush** — `backend/src/server.ts`. New 30s `setInterval` (unref'd) calls `flushUsageCounts()`; graceful `shutdown()` clears the timer and drains one final time before `database.closePool()`. Trade-off: up to 30s of counts can be lost on a hard crash — acceptable for an analytics counter.
+
+Verified: `npm run typecheck` clean.
+
 ## 2026-05-21 — LOW backend audit sweep
 
 - **Deleted internal docs from repo** — removed `backend/BUGFIX_REPORT.md` and `backend/test.md`. Audit history belongs in PRs/changelog, not shipped.

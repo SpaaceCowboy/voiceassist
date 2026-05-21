@@ -24,6 +24,7 @@ import database from './config/database';
 import redis from './config/redis';
 import { swaggerSpec } from './config/swagger';
 import { deleteOldSessions } from './models/session';
+import { flushUsageCounts as flushFaqUsageCounts } from './models/faq';
 import logger from './utils/logger';
 
 // ===========================================
@@ -197,6 +198,7 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 
 const server: Server = createServer(app);
 let sessionCleanupTimer: NodeJS.Timeout | null = null;
+let faqUsageFlushTimer: NodeJS.Timeout | null = null;
 
 setupMediaStreamWebSocket(server);
 
@@ -248,6 +250,17 @@ async function startServer(): Promise<void> {
         }
       }, CLEANUP_INTERVAL);
       sessionCleanupTimer.unref();
+
+      // Flush buffered FAQ usage counts every 30s. Increments happen in-memory
+      // on the conversation hot path; this drains them into a single bulk
+      // UPDATE so popular FAQs don't thrash a hot row on every match.
+      const FAQ_FLUSH_INTERVAL = 30 * 1000;
+      faqUsageFlushTimer = setInterval(() => {
+        flushFaqUsageCounts().catch((err) =>
+          logger.error('FAQ usage flush timer failed', err)
+        );
+      }, FAQ_FLUSH_INTERVAL);
+      faqUsageFlushTimer.unref();
     });
   } catch (error) {
     logger.error('Failed to start server', error);
@@ -263,6 +276,15 @@ async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received. Starting graceful shutdown...`);
 
   if (sessionCleanupTimer) clearInterval(sessionCleanupTimer);
+  if (faqUsageFlushTimer) clearInterval(faqUsageFlushTimer);
+
+  // Drain buffered FAQ usage counts before closing the DB pool so we don't
+  // lose the last 0–30s of analytics on a clean shutdown.
+  try {
+    await flushFaqUsageCounts();
+  } catch (err) {
+    logger.error('Final FAQ usage flush failed during shutdown', err);
+  }
 
   const forceShutdownTimeout = setTimeout(() => {
     logger.error('Forceful shutdown due to timeout');

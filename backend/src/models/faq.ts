@@ -24,7 +24,7 @@ export async function findMatch(question: string): Promise<FAQ | null> {
   );
   
   if (patternResult.rows.length > 0) {
-    void incrementUsageCount(patternResult.rows[0].id);
+    incrementUsageCount(patternResult.rows[0].id);
     return patternResult.rows[0];
   }
   
@@ -42,7 +42,7 @@ export async function findMatch(question: string): Promise<FAQ | null> {
   );
   
   if (variationsResult.rows.length > 0) {
-    void incrementUsageCount(variationsResult.rows[0].id);
+    incrementUsageCount(variationsResult.rows[0].id);
     return variationsResult.rows[0];
   }
   
@@ -66,7 +66,7 @@ export async function findMatch(question: string): Promise<FAQ | null> {
     );
     
     if (keywordResult.rows.length > 0) {
-      void incrementUsageCount(keywordResult.rows[0].id);
+      incrementUsageCount(keywordResult.rows[0].id);
       return keywordResult.rows[0];
     }
   }
@@ -230,18 +230,56 @@ export async function deactivate(id: number): Promise<void> {
 // ANALYTICS
 // -------------------------------------------
 
+// In-memory usage counter. Each FAQ match calls incrementUsageCount() which
+// only bumps the in-process Map; flushUsageCounts() (called on a timer from
+// server.ts and again during shutdown) drains it into a single bulk UPDATE.
+// Trade-off: counts buffered in memory are lost on hard crash. Acceptable
+// because times_used is analytics, not a billing/audit counter.
+const pendingUsage = new Map<number, number>();
+
 /**
- * Increment usage count for an FAQ
+ * Buffer an FAQ match for the next flush. Synchronous — no DB I/O on the
+ * conversation hot path.
  */
-export async function incrementUsageCount(id: number): Promise<void> {
-  // Don't touch updated_at — analytics counter, not a content change.
+export function incrementUsageCount(id: number): void {
+  pendingUsage.set(id, (pendingUsage.get(id) ?? 0) + 1);
+}
+
+/**
+ * Drain the in-memory counter into a single bulk UPDATE. Safe to call on a
+ * timer and during shutdown — a no-op when the map is empty.
+ */
+export async function flushUsageCounts(): Promise<void> {
+  if (pendingUsage.size === 0) return;
+
+  // Snapshot + clear up front so concurrent increments during the awaited
+  // query land in the next flush window instead of being lost on success
+  // or double-counted on failure.
+  const snapshot = Array.from(pendingUsage.entries());
+  pendingUsage.clear();
+
+  // Bulk update via a VALUES table. One round-trip regardless of row count.
+  // Don't touch updated_at — this is an analytics counter, not a content edit.
+  const placeholders = snapshot
+    .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
+    .join(', ');
+  const params = snapshot.flatMap(([id, delta]) => [id, delta]);
+
   try {
     await db.query(
-      `UPDATE faq_responses SET times_used = times_used + 1 WHERE id = $1`,
-      [id]
+      `UPDATE faq_responses
+       SET times_used = faq_responses.times_used + v.delta
+       FROM (VALUES ${placeholders}) AS v(id, delta)
+       WHERE faq_responses.id = v.id`,
+      params
     );
   } catch (err) {
-    logger.warn('FAQ usage increment failed', { id, err });
+    // Restore the snapshot so we retry on the next flush instead of losing
+    // counts. Merge with anything that arrived in the meantime.
+    for (const [id, delta] of snapshot) {
+      pendingUsage.set(id, (pendingUsage.get(id) ?? 0) + delta);
+    }
+    logger.warn('FAQ usage flush failed; counts re-queued', { size: snapshot.length, err });
   }
 }
 
@@ -285,6 +323,7 @@ export default {
   update,
   deactivate,
   incrementUsageCount,
+  flushUsageCounts,
   getMostUsed,
   getUnused,
 };
