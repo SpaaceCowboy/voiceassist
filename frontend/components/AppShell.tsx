@@ -2,28 +2,36 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+
 import { Nav } from "@/components/nav";
-import { useAuthStore, type AuthState } from "@/store/auth";
 import { getMe } from "@/lib/authApi";
+import { useAuthStore } from "@/store/auth";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const hydrate = useAuthStore((s: AuthState) => s.hydrate);
+  const hydrate = useAuthStore((s) => s.hydrate);
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   useEffect(() => {
-    const { token, user, setUser } = useAuthStore.getState();
-    if (token && !user) {
+    const { user, setUser, setAuthenticated } = useAuthStore.getState();
+
+    if (!user) {
       getMe().then((u) => {
-        if (u) setUser(u);
+        if (u) {
+          setUser(u);
+          setAuthenticated(true);
+        }
       });
     }
   }, []);
+
   const pathname = usePathname();
+
   const isAuth =
-    pathname?.startsWith("/login") || pathname?.startsWith("/signup");
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/signup");
 
   if (isAuth) {
     return <>{children}</>;
@@ -32,7 +40,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Nav />
-      <main className="flex-1 ml-60 p-6 min-w-0">{children}</main>
+      <main className="flex-1 ml-60 p-6 min-w-0">
+        {children}
+      </main>
     </div>
   );
 }

@@ -91,9 +91,9 @@ export function Nav() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const token = useAuthStore((s: AuthState) => s.token);
   const user = useAuthStore((s: AuthState) => s.user);
-  const isLoggedIn = !!(token || user);
+  const authenticated = useAuthStore((s: AuthState) => s.authenticated);
+  const isLoggedIn = Boolean(user || authenticated);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -129,25 +129,22 @@ export function Nav() {
             Dashboard
           </NavLink>
           <NavLink href="/users" pathname={pathname}>
-  Users
-</NavLink>
+            Users
+          </NavLink>
           <NavLink href="/appointments" pathname={pathname}>
             Appointments
           </NavLink>
           <NavLink href="/patients" pathname={pathname}>
             Patients
           </NavLink>
-          {/* <NavLink href="/appointments" pathname={pathname}>
-            Reservations
-          </NavLink> */}
           <NavLink href="/calls" pathname={pathname}>
             Calls
           </NavLink>
           <NavLink href="/analytics" pathname={pathname}>
-          Analytics
+            Analytics
           </NavLink>
           <NavLink href="/sessions" pathname={pathname}>
-          Sessions
+            Sessions
           </NavLink>
           <NavLink href="/faqs" pathname={pathname}>
             FAQs
@@ -182,7 +179,7 @@ export function Nav() {
                 <UserIcon className="w-5 h-5" />
               </div>
               <span className="flex-1 text-left text-sm font-medium truncate">
-                Profile
+                {user?.email ?? "Profile"}
               </span>
               <ChevronDown
                 className={`w-4 h-4 shrink-0 transition-transform ${
@@ -203,8 +200,9 @@ export function Nav() {
                   type="button"
                   onClick={() => {
                     setDropdownOpen(false);
-                    logout();
-                    window.location.href = "/login";
+                    void logout().finally(() => {
+                      window.location.href = "/login";
+                    });
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition rounded-lg hover:bg-[rgb(var(--surface2))]"
                   style={{ color: "rgb(var(--text))" }}
