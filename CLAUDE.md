@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Workflow
+
+- **At session start, or when the user asks "what's left" / "what do we need to do" / similar**, read `pending-work.md` at the repo root and summarize the open items.
+- **After finishing any item from `pending-work.md`**, remove its checkbox entry from `pending-work.md` and append a dated entry to `changelog.md` (newest first) describing what changed and which files were touched.
+
 ## Repository Layout
 
 Monorepo for NeuroSpine Institute's AI voice assistant.
@@ -37,6 +42,12 @@ npm run lint                    # eslint
 - **State**: Zustand stores in `store/` (`auth.ts`, `ui.ts`). No React Query in this project despite the global default — `lib/query.ts` and `lib/backend.ts` implement a thin fetch wrapper with `BackendError`.
 - **Backend calls**: `lib/backend.ts` reads `auth-token` from `localStorage` and attaches `Authorization: Bearer …`. A `DATA_SOURCE` / `NEXT_PUBLIC_DATA_SOURCE` env switch toggles between live backend and mock data (`lib/mock-data.ts`).
 - **Components** are grouped by feature (`components/appointments/`, `components/patients/`) plus shared `components/ui/`. `AppShell.tsx` + `nav.tsx` wrap pages.
+
+## Frontend Build Gotchas
+
+- `docker compose up --build` runs `next build` in the frontend image — TypeScript and prerender errors break the stack, not just `npm run build` locally.
+- Any client component using `useSearchParams` must be wrapped in `<Suspense>` from its `page.tsx`, otherwise static prerender fails. See `app/appointments/page.tsx` for the pattern.
+- Next.js 16 deprecates `middleware.ts` in favor of `proxy.ts` (warning only for now).
 
 ## Cross-cutting Conventions
 
