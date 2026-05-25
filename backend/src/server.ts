@@ -22,6 +22,7 @@ import { twilioRoutes, setupMediaStreamWebSocket, apiRoutes, authRoutes } from '
 import { validateTwilioWebhook, requestLogger } from './middleware';
 import database from './config/database';
 import redis from './config/redis';
+import { runMigrations } from './config/migrate';
 import { swaggerSpec } from './config/swagger';
 import { deleteOldSessions } from './models/session';
 import { flushUsageCounts as flushFaqUsageCounts } from './models/faq';
@@ -213,6 +214,9 @@ async function startServer(): Promise<void> {
     if (!dbConnected) {
       throw new Error('Database connection failed');
     }
+
+    logger.info('Running database migrations...');
+    await runMigrations();
 
     logger.info('Connecting to Redis...');
     await redis.connect();
