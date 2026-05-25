@@ -229,7 +229,8 @@ export async function chat(
         max_tokens: 50,
       });
   
-      const content = response.choices[0].message.content || '';
+      const raw = response.choices[0].message.content || '';
+      const content = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
       const parsed = JSON.parse(content);
   
       return {
