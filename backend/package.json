@@ -26,6 +26,7 @@
     "author": "",
     "license": "MIT",
     "dependencies": {
+        "@anthropic-ai/sdk": "^0.98.0",
         "@deepgram/sdk": "^3.13.0",
         "@upstash/redis": "^1.36.2",
         "bcryptjs": "^2.4.3",
