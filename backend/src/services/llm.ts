@@ -143,33 +143,31 @@ export async function continueAfterFunctionCall(
 
   try {
     const systemPrompt = getSystemPrompt(context);
+    const claudeMessages = convertMessagesForClaude(messages);
 
-    const augmentedMessages: Message[] = [
-      ...messages,
-      {
-        role: 'assistant',
-        content: '',
-        tool_calls: [
-          {
-            id: toolCallId,
-            type: 'function' as const,
-            function: {
-              name: functionName,
-              arguments: '{}',
-            },
-          },
-        ],
-        timestamp: new Date(),
-      },
-      {
-        role: 'tool',
-        content: JSON.stringify(functionResult),
-        tool_call_id: toolCallId,
-        timestamp: new Date(),
-      },
-    ];
+    // Append the assistant tool_use and user tool_result directly in Claude format
+    claudeMessages.push({
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool_use',
+          id: toolCallId,
+          name: functionName,
+          input: {},
+        },
+      ],
+    });
 
-    const claudeMessages = convertMessagesForClaude(augmentedMessages);
+    claudeMessages.push({
+      role: 'user',
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolCallId,
+          content: JSON.stringify(functionResult),
+        },
+      ],
+    });
 
     const response = await anthropic.messages.create({
       model: MODEL,
