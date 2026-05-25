@@ -13,7 +13,15 @@ if (!redisUrl) {
   throw new Error('Missing required environment variables: REDIS_URL');
 }
 
-const client = new Redis(redisUrl);
+const useTls = redisUrl.startsWith('rediss://');
+const client = new Redis(redisUrl, {
+  tls: useTls ? { rejectUnauthorized: false } : undefined,
+  maxRetriesPerRequest: 3,
+  retryStrategy(times) {
+    if (times > 5) return null;
+    return Math.min(times * 200, 2000);
+  },
+});
 // Session constants
 const SESSION_PREFIX = 'session:';
 const SESSION_TTL = 3600; // 1 hour
