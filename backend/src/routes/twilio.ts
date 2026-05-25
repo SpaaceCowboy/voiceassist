@@ -202,7 +202,9 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let streamSid: string | null = null;
       let deepgramController: DeepgramController | null = null;
       let isProcessing = false;
-      
+      let isSpeaking = false;
+      let lastTranscript = '';
+
       logger.info('Media stream WebSocket connected');
       
       ws.on('message', async (message: Buffer) => {
@@ -242,26 +244,35 @@ export function setupMediaStreamWebSocket(server: Server): void {
               deepgramController = deepgramService.createLiveTranscription({
                 onTranscript: async (text: string, confidence: number) => {
                   if (!callSid || isProcessing) return;
-                  
+
+                  // Skip duplicate transcripts
+                  if (text === lastTranscript) return;
+                  lastTranscript = text;
+
                   logger.call(callSid, 'info', 'Transcript', { text, confidence });
-                  
+
+                  // Barge-in: if assistant is speaking, clear the audio
+                  if (isSpeaking && streamSid) {
+                    ws.send(JSON.stringify({ event: 'clear', streamSid }));
+                    isSpeaking = false;
+                    logger.call(callSid, 'debug', 'Barge-in: cleared audio');
+                  }
+
                   isProcessing = true;
                   try {
-                    // Process the user's input
                     const response = await conversationService.processInput(callSid, text);
-                    
-                    // Send audio response back through Twilio
+
                     if (response.audio && streamSid) {
+                      isSpeaking = true;
                       await sendAudioResponse(ws, streamSid, response.audio);
                     }
-                    
-                    // Handle call control
+
                     if (response.shouldEnd && callSid) {
                       await hangupCall(callSid);
                     } else if (response.shouldTransfer && callSid) {
                       await transferCall(callSid);
                     }
-                    
+
                   } catch (error) {
                     logger.error('Error processing transcript', error);
                   } finally {
@@ -269,7 +280,12 @@ export function setupMediaStreamWebSocket(server: Server): void {
                   }
                 },
                 onInterim: (text: string) => {
-                  logger.debug('Interim transcript', { text });
+                  // Barge-in on interim speech too
+                  if (isSpeaking && streamSid) {
+                    ws.send(JSON.stringify({ event: 'clear', streamSid }));
+                    isSpeaking = false;
+                    if (callSid) logger.call(callSid, 'debug', 'Barge-in (interim): cleared audio');
+                  }
                 },
                 onError: (error: Error) => {
                   logger.error('Deepgram error', error);
@@ -297,6 +313,12 @@ export function setupMediaStreamWebSocket(server: Server): void {
               }
               break;
               
+            case 'mark':
+              if (data.mark?.name === 'playback_done') {
+                isSpeaking = false;
+              }
+              break;
+
             case 'stop':
               logger.info('Media stream stopped', { callSid });
               break;
@@ -343,6 +365,9 @@ async function sendAudioResponse(
     };
     ws.send(JSON.stringify(message));
   }
+
+  // Mark end of playback with a small delay for Twilio to flush
+  ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'playback_done' } }));
 }
 
 //hang up a call

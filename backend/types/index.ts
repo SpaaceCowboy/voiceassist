@@ -462,7 +462,7 @@ export interface TwilioStatusRequest {
 }
 
 export interface TwilioMediaStreamMessage {
-  event: 'connected' | 'start' | 'media' | 'stop';
+  event: 'connected' | 'start' | 'media' | 'stop' | 'mark';
   start?: {
     callSid: string;
     streamSid: string;
@@ -475,6 +475,9 @@ export interface TwilioMediaStreamMessage {
     chunk: string;
     timestamp: string;
     payload: string;
+  };
+  mark?: {
+    name: string;
   };
 }
 
