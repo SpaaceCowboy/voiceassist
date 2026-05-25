@@ -5,7 +5,7 @@ import { cleanTextForSpeech } from '../utils/helpers'
 import logger from '../utils/logger';
 import type { TTSProvider, OpenAIVoice, OpenAITTSModel} from '../../types/index';
 
-// configuration 
+// configuration
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -13,33 +13,71 @@ const openai = new OpenAI({
 
 const TTS_PROVIDER: TTSProvider = (process.env.TTS_PROVIDER as TTSProvider) || 'openai'
 const OPENAI_VOICE: OpenAIVoice = (process.env.OPENAI_TTS_VOICE as OpenAIVoice) || 'nova';
-const OPENAI_MODEL: OpenAITTSModel = (process.env.OPENAI_TTS_MODEL as OpenAITTSModel) || 'tts-1'
+const OPENAI_MODEL: OpenAITTSModel = ((process.env.OPENAI_TTS_MODEL as string) || 'tts-1').toLowerCase() as OpenAITTSModel
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
 
-// openai tts
+// --- Mulaw encoding utilities ---
 
-//generate speech using openai tts api
+const MULAW_BIAS = 0x84;
+const MULAW_CLIP = 32635;
+const MULAW_MAX = 0x1FFF;
+
+function linearToMulaw(sample: number): number {
+  const sign = sample < 0 ? 0x80 : 0;
+  if (sample < 0) sample = -sample;
+  if (sample > MULAW_CLIP) sample = MULAW_CLIP;
+  sample += MULAW_BIAS;
+
+  let exponent = 7;
+  for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; exponent--, expMask >>= 1) {
+    /* find segment */
+  }
+  const mantissa = (sample >> (exponent + 3)) & 0x0F;
+  const mulawByte = ~(sign | (exponent << 4) | mantissa) & 0xFF;
+  return mulawByte;
+}
+
+function pcm24kToMulaw8k(pcmBuffer: Buffer): Buffer {
+  const sampleCount = pcmBuffer.length / 2;
+  const ratio = 3; // 24000 / 8000
+  const outputLength = Math.floor(sampleCount / ratio);
+  const output = Buffer.alloc(outputLength);
+
+  for (let i = 0; i < outputLength; i++) {
+    const srcIndex = i * ratio;
+    const offset = srcIndex * 2;
+    if (offset + 1 < pcmBuffer.length) {
+      const sample = pcmBuffer.readInt16LE(offset);
+      output[i] = linearToMulaw(sample);
+    }
+  }
+
+  return output;
+}
+
+// openai tts
 
 export async function openaiTTS(text: string): Promise<Buffer> {
     const startTime = Date.now();
     const cleanedText = cleanTextForSpeech(text);
 
     try {
-        const mp3Response = await openai.audio.speech.create({
+        const pcmResponse = await openai.audio.speech.create({
             model: OPENAI_MODEL,
             voice: OPENAI_VOICE,
             input: cleanedText,
-            response_format: 'mp3'
+            response_format: 'pcm'
         });
 
-        const arrayBuffer = await mp3Response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        const arrayBuffer = await pcmResponse.arrayBuffer();
+        const pcmBuffer = Buffer.from(arrayBuffer);
+        const mulawBuffer = pcm24kToMulaw8k(pcmBuffer);
 
         const duration = Date.now() - startTime;
         logger.apiTiming('OpenAI', 'TTS', duration, true);
 
-        return buffer;
+        return mulawBuffer;
     } catch (error) {
         const duration = Date.now() - startTime;
         logger.apiTiming('OpenAI', 'TTS', duration, false);
@@ -57,7 +95,7 @@ export async function openaiTTSStream(text: string): Promise<NodeJS.ReadableStre
         model: OPENAI_MODEL,
         voice: OPENAI_VOICE,
         input: cleanedText,
-        response_format: 'mp3'
+        response_format: 'pcm'
     });
 
     return response.body as unknown as NodeJS.ReadableStream;
@@ -203,14 +241,7 @@ export function getAvailableVoices(provider: TTSProvider): string[] {
     return [];
 }
 
-// convert audio to Twilio-compatible format
-//this is a place holder change in production
-
 export async function convertToMulaw(audioBuffer: Buffer): Promise<Buffer> {
-    // In production, use ffmpeg or a similar library:
-    // ffmpeg -i input.mp3 -ar 8000 -ac 1 -codec:a pcm_mulaw -f mulaw output.raw
-    
-    logger.warn('convertToMulaw: Not implemented - returning original buffer');
     return audioBuffer;
   }
 

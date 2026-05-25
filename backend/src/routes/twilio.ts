@@ -324,22 +324,25 @@ export function setupMediaStreamWebSocket(server: Server): void {
     logger.info('Media stream WebSocket server initialized');
   }
 
-  // send audio back through the media stream
+  // send audio back through the media stream in 20ms chunks (160 bytes at 8kHz mulaw)
 async function sendAudioResponse(
   ws: WebSocket,
   streamSid: string,
   audioBuffer: Buffer
 ): Promise<void> {
-  const audioBase64 = audioBuffer.toString('base64');
-  const message = {
-    event:'media',
-    streamSid,
-    media: {
-      payload: audioBase64,
-    },
-  }
+  const CHUNK_SIZE = 160;
 
-  ws.send(JSON.stringify(message))
+  for (let offset = 0; offset < audioBuffer.length; offset += CHUNK_SIZE) {
+    const chunk = audioBuffer.subarray(offset, offset + CHUNK_SIZE);
+    const message = {
+      event: 'media',
+      streamSid,
+      media: {
+        payload: chunk.toString('base64'),
+      },
+    };
+    ws.send(JSON.stringify(message));
+  }
 }
 
 //hang up a call
