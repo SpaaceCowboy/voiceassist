@@ -138,14 +138,14 @@ export async function continueAfterFunctionCall(
   functionResult: unknown,
   toolCallId: string,
   context: ToolContext
-): Promise<string> {
+): Promise<OpenAIChatResponse> {
   const startTime = Date.now();
 
   try {
     const systemPrompt = getSystemPrompt(context);
     const claudeMessages = convertMessagesForClaude(messages);
+    const claudeTools = convertToolsForClaude(getTools());
 
-    // Append the assistant tool_use and user tool_result directly in Claude format
     claudeMessages.push({
       role: 'assistant',
       content: [
@@ -174,18 +174,39 @@ export async function continueAfterFunctionCall(
       max_tokens: 500,
       system: systemPrompt,
       messages: claudeMessages,
+      tools: claudeTools,
     });
 
     const duration = Date.now() - startTime;
     logger.apiTiming('Claude', 'continueAfterFunctionCall', duration, true);
 
+    let content: string | null = null;
+    let functionCall: FunctionCallResult | null = null;
+
     for (const block of response.content) {
       if (block.type === 'text') {
-        return block.text;
+        content = block.text;
+      } else if (block.type === 'tool_use') {
+        functionCall = {
+          name: block.name,
+          arguments: block.input as Record<string, unknown>,
+          id: block.id,
+        };
       }
     }
 
-    return '';
+    return {
+      content,
+      functionCall,
+      usage: response.usage
+        ? {
+            prompt_tokens: response.usage.input_tokens,
+            completion_tokens: response.usage.output_tokens,
+            total_tokens:
+              response.usage.input_tokens + response.usage.output_tokens,
+          }
+        : null,
+    };
   } catch (error) {
     const duration = Date.now() - startTime;
     logger.apiTiming('Claude', 'continueAfterFunctionCall', duration, false);

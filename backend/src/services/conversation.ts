@@ -165,16 +165,21 @@ export async function processInput(
   let shouldTransfer = false;
   let transferReason:  string | undefined;
 
-  // handle function call if present
-  if (response.functionCall) {
-    const { name, arguments: args, id} = response.functionCall;
-    logger.call(callSid, 'info', 'Function call', {name, args});
+  // handle function calls — loop to support chained tool use
+  const MAX_TOOL_ROUNDS = 5;
+  let currentResponse = response;
 
-    //execute the function 
+  for (let round = 0; round < MAX_TOOL_ROUNDS && currentResponse.functionCall; round++) {
+    const { name, arguments: args, id } = currentResponse.functionCall;
+    logger.call(callSid, 'info', 'Function call', { name, args });
+
     const result = await executeFunctionCall(callSid, name, args);
 
-    // get natural response after function execution
-    responseText = await openaiService.continueAfterFunctionCall(
+    shouldEnd = shouldEnd || result.shouldEnd || false;
+    shouldTransfer = shouldTransfer || result.shouldTransfer || false;
+    transferReason = transferReason || result.transferReason;
+
+    const continueResponse = await openaiService.continueAfterFunctionCall(
       updatedSession.messageHistory,
       name,
       result,
@@ -182,10 +187,8 @@ export async function processInput(
       context
     );
 
-    // check for end/transfer flags
-    shouldEnd = result.shouldEnd || false;
-    shouldTransfer = result.shouldTransfer || false;
-    transferReason = result.transferReason;
+    responseText = continueResponse.content || '';
+    currentResponse = continueResponse;
   }
 
   // generate TTS audio 
