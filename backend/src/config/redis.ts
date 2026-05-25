@@ -13,15 +13,26 @@ if (!redisUrl) {
   throw new Error('Missing required environment variables: REDIS_URL');
 }
 
-const useTls = redisUrl.startsWith('rediss://');
-const client = new Redis(redisUrl, {
-  tls: useTls ? { rejectUnauthorized: false } : undefined,
-  maxRetriesPerRequest: 3,
-  retryStrategy(times) {
-    if (times > 5) return null;
-    return Math.min(times * 200, 2000);
-  },
-});
+function parseRedisUrl(url: string) {
+  const useTls = url.startsWith('rediss://');
+  const normalized = url.replace(/^rediss:\/\//, 'redis://');
+  const parsed = new URL(normalized);
+
+  return {
+    host: parsed.hostname,
+    port: parseInt(parsed.port || '6379'),
+    password: decodeURIComponent(parsed.password),
+    username: parsed.username || 'default',
+    tls: useTls ? { rejectUnauthorized: false } : undefined,
+    maxRetriesPerRequest: 3,
+    retryStrategy(times: number) {
+      if (times > 5) return null;
+      return Math.min(times * 200, 2000);
+    },
+  };
+}
+
+const client = new Redis(parseRedisUrl(redisUrl));
 // Session constants
 const SESSION_PREFIX = 'session:';
 const SESSION_TTL = 3600; // 1 hour
