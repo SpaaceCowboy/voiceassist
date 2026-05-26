@@ -169,6 +169,7 @@ export async function processInput(
   const MAX_TOOL_ROUNDS = 5;
   let currentResponse = response;
   let lastToolKey = '';
+  const toolCallCounts = new Map<string, number>();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS && currentResponse.functionCall; round++) {
     const { name, arguments: args, id } = currentResponse.functionCall;
@@ -181,6 +182,14 @@ export async function processInput(
       break;
     }
     lastToolKey = toolKey;
+
+    // Detect repeated calls to the same tool (even with different args)
+    const count = (toolCallCounts.get(name) || 0) + 1;
+    toolCallCounts.set(name, count);
+    if (count > 2) {
+      logger.call(callSid, 'warn', 'Tool called too many times, breaking loop', { name, count, round });
+      break;
+    }
 
     logger.call(callSid, 'info', 'Function call', { name, args });
 
