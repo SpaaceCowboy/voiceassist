@@ -56,12 +56,14 @@ Completed improvements, newest first.
 
 ## 2026-05-26 — Duplicate Tool Call Detection
 
-**Problem:** Claude got stuck calling the same tool with identical args up to 5 times in a row (the max loop limit), wasting ~6.5s of API time per loop.
+**Problem:** Claude got stuck calling the same tool with identical args up to 5 times in a row (the max loop limit), wasting ~6.5s of API time per loop. Additionally, Claude called `transfer_to_staff` 5 times with slightly different `notes` text — same tool, same intent, but different args so the exact-match check didn't catch it (23.6s wasted).
 
-**Solution:** Track `lastToolKey` (tool name + serialized args) across loop rounds. If Claude calls the same tool with the same args back-to-back, break the loop and respond with a retry prompt.
+**Solution:** Two-layer detection:
+1. Exact match: track `lastToolKey` (tool name + serialized args). If identical back-to-back, break the loop with a retry prompt.
+2. Per-tool count: track how many times each tool name is called via `toolCallCounts` map. If any tool is called more than twice in one turn, break the loop.
 
 **Files changed:**
-- `backend/src/services/conversation.ts` — `lastToolKey` comparison in tool loop
+- `backend/src/services/conversation.ts` — `lastToolKey` comparison + `toolCallCounts` map in tool loop
 
 ## 2026-05-26 — Post-Hangup TTS Prevention
 
