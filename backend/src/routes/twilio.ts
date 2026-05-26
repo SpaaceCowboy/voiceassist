@@ -317,6 +317,15 @@ export function setupMediaStreamWebSocket(server: Server): void {
                     return;
                   }
 
+                  // While the assistant is speaking, ignore very short transcripts
+                  // (single filler words like "the", "uh", breaths) — only real
+                  // sentences should interrupt and get processed.
+                  const wordCount = text.trim().split(/\s+/).length;
+                  if (isSpeaking && wordCount <= 2 && text.trim().length < 8) {
+                    logger.call(callSid, 'debug', 'Ignoring short transcript during playback', { text, wordCount });
+                    return;
+                  }
+
                   // Prepend any buffered fragments
                   let fullText = text;
                   if (pendingFragment) {
@@ -334,11 +343,13 @@ export function setupMediaStreamWebSocket(server: Server): void {
                   }
                 },
                 onInterim: (text: string) => {
-                  // Barge-in on interim speech too
-                  if (isSpeaking && streamSid) {
+                  // Barge-in on interim speech — only if it looks like real words
+                  // (at least 2 words and 5 chars to avoid breath/noise triggers)
+                  const words = text.trim().split(/\s+/);
+                  if (isSpeaking && streamSid && words.length >= 2 && text.trim().length >= 5) {
                     ws.send(JSON.stringify({ event: 'clear', streamSid }));
                     isSpeaking = false;
-                    if (callSid) logger.call(callSid, 'debug', 'Barge-in (interim): cleared audio');
+                    if (callSid) logger.call(callSid, 'debug', 'Barge-in (interim): cleared audio', { text });
                   }
                 },
                 onError: (error: Error) => {
