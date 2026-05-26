@@ -32,7 +32,7 @@ async function getCached(text: string): Promise<Buffer | null> {
     const key = getCacheKey(text);
     const data = await redis.client.getBuffer(key);
     if (data) {
-      logger.debug('TTS cache hit', { key });
+      logger.info('TTS cache hit', { key, bytes: data.length });
       return data;
     }
   } catch {
