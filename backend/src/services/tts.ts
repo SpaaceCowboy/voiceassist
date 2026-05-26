@@ -283,6 +283,37 @@ export async function convertToMulaw(audioBuffer: Buffer): Promise<Buffer> {
     return audioBuffer;
   }
 
+const COMMON_PHRASES = [
+    "Could you please tell me which location you'd prefer?",
+    "Let me check availability for you.",
+    "Your appointment has been booked.",
+    "Could you tell me your preferred date and time?",
+    "Which doctor would you like to see?",
+    "Is there anything else I can help you with?",
+    "Transferring you now. Please hold.",
+    "Thank you for calling. Goodbye.",
+    "I'm sorry, could you please repeat that?",
+    "Let me look that up for you.",
+    "Could you please confirm that information?",
+    "I'd be happy to help you with that.",
+  ];
+
+  export async function prewarmCache(): Promise<void> {
+    let cached = 0;
+    let generated = 0;
+    for (const phrase of COMMON_PHRASES) {
+      const existing = await getCached(phrase);
+      if (existing) { cached++; continue; }
+      try {
+        await textToSpeech(phrase);
+        generated++;
+      } catch {
+        // non-critical — skip on error
+      }
+    }
+    logger.info('TTS cache prewarm complete', { cached, generated, total: COMMON_PHRASES.length });
+  }
+
   export default {
     textToSpeech,
     textToSpeechStream,
@@ -293,4 +324,5 @@ export async function convertToMulaw(audioBuffer: Buffer): Promise<Buffer> {
     splitTextForStreaming,
     getAvailableVoices,
     convertToMulaw,
+    prewarmCache,
   };

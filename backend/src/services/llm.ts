@@ -13,7 +13,7 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
+const MODEL = process.env.LLM_MODEL || 'claude-haiku-4-5';
 
 function convertToolsForClaude(tools: ToolDefinition[]): Anthropic.Tool[] {
   return tools.map((t) => ({

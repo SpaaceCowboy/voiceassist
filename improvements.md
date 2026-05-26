@@ -2,6 +2,54 @@
 
 Completed improvements, newest first.
 
+## 2026-05-27 — LLM Latency: Switch to Claude Haiku for Real-Time Conversation
+
+**Problem:** Claude Sonnet responses took 1.7-3.5s per turn, which is the biggest contributor to perceived latency in the voice conversation (more than TTS).
+
+**Solution:** Switched the default real-time conversation model from `claude-sonnet-4-6` to `claude-haiku-4-5`, which should roughly halve response times (~0.8-1.5s). Sonnet can still be used by setting `LLM_MODEL=claude-sonnet-4-6` env var. Post-call analysis (summary, intent, sentiment) stays on `gpt-4o-mini` — unaffected.
+
+**Files changed:**
+- `backend/src/services/llm.ts` — changed default MODEL from `claude-sonnet-4-6` to `claude-haiku-4-5`
+
+## 2026-05-27 — Utterance Debounce: Merge Split Transcripts
+
+**Problem:** When a caller pauses mid-sentence (e.g. "On Friday," ... "May 9."), Deepgram's `utterance_end_ms: 1000` fires two separate final transcripts. Each triggered its own LLM round trip, wasting time and confusing context (the LLM got "On Friday," alone without the date).
+
+**Solution:** Added a 1.5s debounce buffer. When a final transcript arrives and the system is idle, it's buffered for 1.5s. If another transcript arrives within that window, they're merged into a single input. If the system is already processing (busy), the debounce is skipped and transcripts queue immediately to avoid stacking delays. Buffer is cleared on call end.
+
+**Files changed:**
+- `backend/src/routes/twilio.ts` — added `debounceTimer`, `debounceBuffer`, `DEBOUNCE_MS` with merge logic in `onTranscript` and cleanup in `stop` event
+
+## 2026-05-27 — TTS Pre-Warm Cache for Common Phrases
+
+**Problem:** Common assistant phrases ("Let me check availability for you.", "Thank you for calling. Goodbye.", etc.) were generated fresh on the first call after deploy, adding 1-3s latency for each.
+
+**Solution:** Added `prewarmCache()` to the TTS service with 12 common phrases. Called at server startup (non-blocking). Phrases that are already cached (from the 24h Redis TTL) are skipped. This means the first call after deploy gets instant TTS for predictable responses.
+
+**Files changed:**
+- `backend/src/services/tts.ts` — added `COMMON_PHRASES` array and `prewarmCache()` function
+- `backend/src/server.ts` — import `ttsService`, call `prewarmCache()` after listen
+
+## 2026-05-27 — Deepgram Model: nova-2-medical
+
+**Problem:** General `nova-2` model misheard medical terms and location names on 8kHz phone audio (e.g. "back pain" → "back panel", "Palmdale" → "Palmville").
+
+**Solution:** Switched Deepgram live transcription model from `nova-2` to `nova-2-medical`, which is optimized for medical vocabulary. Same pricing tier — zero cost increase.
+
+**Files changed:**
+- `backend/src/services/deepgram.ts` — changed model from `nova-2` to `nova-2-medical`
+
+## 2026-05-27 — Barge-In Noise Filter
+
+**Problem:** Breath sounds and ambient noise triggered false barge-in, causing the assistant to stop speaking mid-sentence. Deepgram would pick up sounds like "The", "the." with medium confidence (0.53-0.72) and both interim and final transcript handlers would clear audio.
+
+**Solution:** Two filters:
+1. Interim barge-in now requires 2+ words and 5+ chars before clearing audio
+2. Final transcripts of 1-2 short words (under 8 chars) while the assistant is speaking are silently discarded
+
+**Files changed:**
+- `backend/src/routes/twilio.ts` — added word count/length checks in `onInterim` and `onTranscript` handlers
+
 ## 2026-05-26 — Transcript Queue
 
 **Problem:** The `isProcessing` flag silently dropped any caller speech that arrived while the assistant was processing a previous response. If the caller spoke during the LLM + TTS cycle (~5-10s), their input was lost entirely.

@@ -27,6 +27,7 @@ import { swaggerSpec } from './config/swagger';
 import { deleteOldSessions } from './models/session';
 import { flushUsageCounts as flushFaqUsageCounts } from './models/faq';
 import logger from './utils/logger';
+import ttsService from './services/tts';
 
 // ===========================================
 // ENV VALIDATION
@@ -232,6 +233,8 @@ async function startServer(): Promise<void> {
       logger.info(`Twilio Validation: ${process.env.SKIP_TWILIO_VALIDATION === 'true' ? 'SKIPPED (dev)' : 'ENABLED'}`);
       logger.info(`JWT Auth: ENABLED`);
       logger.info('='.repeat(50));
+
+      ttsService.prewarmCache().catch(() => {});
       logger.info('');
       logger.info('Twilio Webhook URLs (configure in Twilio console):');
       logger.info(`  Voice:  POST https://<your-domain>/twilio/voice`);

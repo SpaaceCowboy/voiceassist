@@ -208,6 +208,9 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let callEnded = false;
       let pendingFragment = '';
       let transcriptQueue: string[] = [];
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+      let debounceBuffer = '';
+      const DEBOUNCE_MS = 1500;
 
       // Process a single transcript through LLM + TTS
       async function handleTranscript(input: string): Promise<void> {
@@ -334,12 +337,32 @@ export function setupMediaStreamWebSocket(server: Server): void {
                     pendingFragment = '';
                   }
 
-                  // Queue transcript and drain
-                  transcriptQueue.push(fullText);
+                  // Debounce: accumulate transcripts and wait for a pause so
+                  // split utterances ("On Friday," + "May 9.") merge into one LLM call.
+                  // If already processing, skip debounce and queue immediately to
+                  // avoid adding delay on top of existing LLM latency.
                   if (isProcessing) {
+                    if (debounceTimer) {
+                      clearTimeout(debounceTimer);
+                      fullText = debounceBuffer + ' ' + fullText;
+                      debounceBuffer = '';
+                      debounceTimer = null;
+                    }
+                    transcriptQueue.push(fullText);
                     logger.call(callSid, 'info', 'Transcript queued (processing busy)', { input: fullText, queueSize: transcriptQueue.length });
                   } else {
-                    drainQueue();
+                    debounceBuffer += (debounceBuffer ? ' ' : '') + fullText;
+                    if (debounceTimer) clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => {
+                      const merged = debounceBuffer;
+                      debounceBuffer = '';
+                      debounceTimer = null;
+                      if (merged && callSid && !callEnded) {
+                        logger.call(callSid!, 'debug', 'Debounce fired', { input: merged });
+                        transcriptQueue.push(merged);
+                        drainQueue();
+                      }
+                    }, DEBOUNCE_MS);
                   }
                 },
                 onInterim: (text: string) => {
@@ -386,6 +409,8 @@ export function setupMediaStreamWebSocket(server: Server): void {
 
             case 'stop':
               callEnded = true;
+              if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+              debounceBuffer = '';
               logger.info('Media stream stopped', { callSid });
               break;
           }
