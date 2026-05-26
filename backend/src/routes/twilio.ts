@@ -8,6 +8,7 @@ import twilio from 'twilio'
 import { WebSocket, WebSocketServer } from 'ws'
 import conversationService from '../services/conversation'
 import deepgramService from '../services/deepgram'
+import ttsService from '../services/tts'
 import redis from '../config/redis'
 import logger from '../utils/logger'
 import type {
@@ -278,16 +279,16 @@ export function setupMediaStreamWebSocket(server: Server): void {
 
                   isProcessing = true;
                   try {
-                    const response = await conversationService.processInput(callSid, fullText, () => !callEnded);
+                    const response = await conversationService.processInput(callSid, fullText);
 
                     if (callEnded) {
                       logger.call(callSid, 'debug', 'Call ended during processing, skipping response');
                       return;
                     }
 
-                    if (response.audio && streamSid) {
+                    if (response.text && streamSid) {
                       isSpeaking = true;
-                      await sendAudioResponse(ws, streamSid, response.audio);
+                      await streamTTSResponse(ws, streamSid, response.text, callSid, () => !callEnded);
                     }
 
                     if (response.shouldEnd && callSid) {
@@ -390,8 +391,56 @@ async function sendAudioResponse(
     ws.send(JSON.stringify(message));
   }
 
-  // Mark end of playback with a small delay for Twilio to flush
   ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'playback_done' } }));
+}
+
+// Split text into sentences, generate TTS per-sentence, and stream each
+// to the caller as soon as it's ready. First sentence plays while the
+// rest are still being generated — cuts perceived latency significantly.
+async function streamTTSResponse(
+  ws: WebSocket,
+  streamSid: string,
+  text: string,
+  callSid: string,
+  isActive: () => boolean,
+): Promise<void> {
+  const sentences = ttsService.splitTextForStreaming(text);
+  const startTime = Date.now();
+
+  if (sentences.length <= 1) {
+    // Short response — no benefit from splitting, just generate and send
+    if (!isActive()) return;
+    try {
+      const audio = await ttsService.textToSpeech(text);
+      if (!isActive()) return;
+      await sendAudioResponse(ws, streamSid, audio);
+    } catch (error) {
+      logger.call(callSid, 'error', 'TTS generation failed', error);
+    }
+    const duration = Date.now() - startTime;
+    logger.call(callSid, 'info', 'Streaming TTS complete', { duration: `${duration}ms`, chunks: 1 });
+    return;
+  }
+
+  // Multi-sentence: generate first sentence immediately, start remaining in parallel
+  logger.call(callSid, 'debug', 'Streaming TTS', { sentences: sentences.length });
+
+  // Kick off TTS for all sentences concurrently
+  const ttsPromises = sentences.map((sentence) => ttsService.textToSpeech(sentence));
+
+  for (let i = 0; i < ttsPromises.length; i++) {
+    if (!isActive()) return;
+    try {
+      const audio = await ttsPromises[i];
+      if (!isActive()) return;
+      await sendAudioResponse(ws, streamSid, audio);
+    } catch (error) {
+      logger.call(callSid, 'error', 'TTS chunk failed', { sentence: i, error });
+    }
+  }
+
+  const duration = Date.now() - startTime;
+  logger.call(callSid, 'info', 'Streaming TTS complete', { duration: `${duration}ms`, chunks: sentences.length });
 }
 
 //hang up a call

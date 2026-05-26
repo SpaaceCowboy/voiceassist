@@ -131,7 +131,6 @@ export async function generateGreeting(callSid: string): Promise<GreetingRespons
 export async function processInput(
   callSid: string,
   userInput: string,
-  isActive?: () => boolean,
 ): Promise<ConversationResponse> {
   const startTime = Date.now();
   logger.call(callSid, 'info', 'processing input', {input: userInput});
@@ -203,34 +202,14 @@ export async function processInput(
     currentResponse = continueResponse;
   }
 
-  // generate TTS audio
-  let audio: Buffer | undefined;
+  // Persist response (TTS is now handled by the route layer for streaming)
   if (responseText) {
-    // Skip TTS if call already ended or session was cleaned up
-    if (isActive && !isActive()) {
-      logger.call(callSid, 'info', 'Call ended before TTS, skipping');
-      return { text: responseText, shouldEnd, shouldTransfer, transferReason };
-    }
-    const sessionStillActive = await redis.getSession(callSid);
-    if (!sessionStillActive) {
-      logger.call(callSid, 'warn', 'Session gone before TTS, skipping');
-      return { text: responseText, shouldEnd, shouldTransfer, transferReason };
-    }
-
-    try {
-      audio = await ttsService.textToSpeech(responseText);
-    } catch (error) {
-      logger.call(callSid, 'error', 'TTS generation failed', error);
-    }
-
-    //add response to history
     await redis.addMessage(callSid, {
       role: 'assistant',
       content: responseText,
       timestamp: new Date(),
     })
 
-    //update transcript
     await callLogModel.appendToTranscript(callSid, 'user', userInput);
     await callLogModel.appendToTranscript(callSid, 'assistant', responseText);
   }
@@ -240,7 +219,6 @@ export async function processInput(
 
   return {
     text: responseText,
-    audio,
     shouldEnd,
     shouldTransfer,
     transferReason,

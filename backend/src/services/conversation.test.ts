@@ -224,11 +224,10 @@ describe('processInput', () => {
     await expect(processInput('missing', 'hi')).rejects.toThrow(/Session not found/);
   });
 
-  it('handles a plain (non-function-call) response: TTS, history, transcript', async () => {
+  it('handles a plain (non-function-call) response: history, transcript, no TTS', async () => {
     const session = makeSession();
-    // session lookups: initial, refresh after addMessage, session-alive check before TTS
+    // session lookups: initial, refresh after addMessage
     m.redis.getSession
-      .mockResolvedValueOnce(session)
       .mockResolvedValueOnce(session)
       .mockResolvedValueOnce(session);
     m.openaiService.chat.mockResolvedValueOnce({ content: 'Sure, I can help.', functionCall: null });
@@ -238,7 +237,8 @@ describe('processInput', () => {
     expect(result.text).toBe('Sure, I can help.');
     expect(result.shouldEnd).toBe(false);
     expect(result.shouldTransfer).toBe(false);
-    expect(result.audio).toBeInstanceOf(Buffer);
+    // TTS is now handled by the route layer, not processInput
+    expect(m.ttsService.textToSpeech).not.toHaveBeenCalled();
 
     // User input added to message history first.
     expect(m.redis.addMessage).toHaveBeenCalledWith(
@@ -259,9 +259,8 @@ describe('processInput', () => {
 
   it('executes a function call and propagates shouldTransfer', async () => {
     const session = makeSession();
-    // session reads: initial, refresh, executeFunctionCall lookup, session-alive before TTS
+    // session reads: initial, refresh, executeFunctionCall lookup
     m.redis.getSession
-      .mockResolvedValueOnce(session)
       .mockResolvedValueOnce(session)
       .mockResolvedValueOnce(session)
       .mockResolvedValueOnce(session);
@@ -302,8 +301,7 @@ describe('processInput', () => {
       .mockResolvedValueOnce(session)   // initial
       .mockResolvedValueOnce(session)   // refresh after addMessage
       .mockResolvedValueOnce(session)   // executeFunctionCall
-      .mockResolvedValueOnce(session)   // handleEndCall refresh
-      .mockResolvedValueOnce(session);  // session-alive check before TTS
+      .mockResolvedValueOnce(session);  // handleEndCall refresh
 
     m.openaiService.chat.mockResolvedValueOnce({
       content: null,
@@ -330,8 +328,7 @@ describe('processInput', () => {
     m.redis.getSession
       .mockResolvedValueOnce(session)   // initial
       .mockResolvedValueOnce(session)   // refresh
-      .mockResolvedValueOnce(session)   // executeFunctionCall (round 0)
-      .mockResolvedValueOnce(session);  // session-alive before TTS
+      .mockResolvedValueOnce(session);  // executeFunctionCall (round 0)
 
     const toolCall = {
       id: 'tool-1',
@@ -360,19 +357,21 @@ describe('processInput', () => {
     expect(m.openaiService.continueAfterFunctionCall).toHaveBeenCalledTimes(1);
   });
 
-  it('skips TTS when session is gone (post-hangup)', async () => {
+  it('returns text without generating TTS (route layer handles TTS)', async () => {
     const session = makeSession();
     m.redis.getSession
-      .mockResolvedValueOnce(session)   // initial
-      .mockResolvedValueOnce(session)   // refresh
-      .mockResolvedValueOnce(null);     // session-alive check — gone!
+      .mockResolvedValueOnce(session)
+      .mockResolvedValueOnce(session);
     m.openaiService.chat.mockResolvedValueOnce({ content: 'Here is your info.', functionCall: null });
 
     const result = await processInput('CA123', 'what appointments do I have');
 
     expect(result.text).toBe('Here is your info.');
-    expect(result.audio).toBeUndefined();
     expect(m.ttsService.textToSpeech).not.toHaveBeenCalled();
+    expect(m.redis.addMessage).toHaveBeenCalledWith(
+      'CA123',
+      expect.objectContaining({ role: 'assistant', content: 'Here is your info.' }),
+    );
   });
 
   it('omits TTS + history append when response text is empty', async () => {
