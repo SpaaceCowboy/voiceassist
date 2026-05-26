@@ -2,6 +2,17 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-05-26 — Voice pipeline reliability & performance
+
+- **STT confidence threshold + fragment buffering** — `backend/src/routes/twilio.ts`. Transcripts below 0.6 confidence are buffered and prepended to the next good transcript instead of being dropped. Prevents split sentences ("Can" + "we move it...") and garbage input to Claude.
+- **Duplicate tool call detection (two-layer)** — `backend/src/services/conversation.ts`. Exact-match detection breaks on identical back-to-back calls. Per-tool count cap (max 2) catches repeated calls with different args (e.g. `transfer_to_staff` called 5x with different notes).
+- **Post-hangup guards** — `backend/src/routes/twilio.ts`. `callEnded` flag prevents new transcript processing and audio sending after WebSocket `stop` event. Queue cleared on `end_call`/`transfer`.
+- **Streaming TTS** — `backend/src/routes/twilio.ts`, `backend/src/services/conversation.ts`. Moved TTS out of `processInput` into route layer. Text split into sentences, TTS fired concurrently, chunks sent as ready. First audio in ~1.7s vs ~5s previously.
+- **TTS caching** — `backend/src/services/tts.ts`. Redis-backed cache (SHA-256 key of text + provider config, 24h TTL). Greeting went from 5125ms → 0ms on repeat calls.
+- **Transcript queue** — `backend/src/routes/twilio.ts`. Replaced `isProcessing` boolean with queue + `drainQueue()`. Caller speech during assistant processing is queued and processed next, not silently dropped.
+- **Betterstack logging** — `backend/src/utils/logger.ts`. All logs shipped to Betterstack via HTTP POST with structured fields (`callSid`, `confidence`, `duration`, etc.) and inline summaries in the message for list view visibility.
+- **Test call script** — `backend/scripts/test-call.ts`. 8 scripted scenarios (reschedule, book, cancel, FAQ, transfer, quick hangup, ambiguous, multi-intent) using Twilio REST API with `<Say>` TwiML for end-to-end testing without a real caller.
+
 ## 2026-05-21 — FAQ usage count batching
 
 - **Buffered FAQ usage counts in-process** — `backend/src/models/faq.ts`. `incrementUsageCount(id)` is now synchronous and only bumps an in-memory `Map<id, delta>` — no DB I/O on the conversation hot path. Removes row-lock contention and WAL churn on popular FAQ rows that every matched call was updating.
