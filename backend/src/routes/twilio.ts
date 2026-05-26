@@ -207,18 +207,71 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let lastTranscript = '';
       let callEnded = false;
       let pendingFragment = '';
+      let transcriptQueue: string[] = [];
+
+      // Process a single transcript through LLM + TTS
+      async function handleTranscript(input: string): Promise<void> {
+        if (!callSid || callEnded) return;
+
+        // Barge-in: if assistant is speaking, clear the audio
+        if (isSpeaking && streamSid) {
+          ws.send(JSON.stringify({ event: 'clear', streamSid }));
+          isSpeaking = false;
+          logger.call(callSid, 'debug', 'Barge-in: cleared audio');
+        }
+
+        try {
+          const response = await conversationService.processInput(callSid, input);
+
+          if (callEnded) {
+            logger.call(callSid, 'debug', 'Call ended during processing, skipping response');
+            return;
+          }
+
+          if (response.text && streamSid) {
+            isSpeaking = true;
+            await streamTTSResponse(ws, streamSid, response.text, callSid, () => !callEnded);
+          }
+
+          if (response.shouldEnd && callSid) {
+            await hangupCall(callSid);
+          } else if (response.shouldTransfer && callSid) {
+            await transferCall(callSid);
+          }
+        } catch (error) {
+          logger.error('Error processing transcript', error);
+        }
+      }
+
+      // Drain the transcript queue sequentially
+      async function drainQueue(): Promise<void> {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        try {
+          while (transcriptQueue.length > 0 && !callEnded) {
+            const next = transcriptQueue.shift()!;
+            if (callSid) {
+              logger.call(callSid, 'info', 'Processing queued transcript', { input: next, remaining: transcriptQueue.length });
+            }
+            await handleTranscript(next);
+          }
+        } finally {
+          isProcessing = false;
+        }
+      }
 
       logger.info('Media stream WebSocket connected');
-      
+
       ws.on('message', async (message: Buffer) => {
         try {
           const data = JSON.parse(message.toString()) as TwilioMediaStreamMessage;
-          
+
           switch (data.event) {
             case 'connected':
               logger.debug('Media stream connected');
               break;
-              
+
             case 'start':
               // Extract call metadata
               callSid = data.start?.customParameters?.callSid || data.start?.callSid || null;
@@ -246,7 +299,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
               // Initialize Deepgram for transcription
               deepgramController = deepgramService.createLiveTranscription({
                 onTranscript: async (text: string, confidence: number) => {
-                  if (!callSid || isProcessing || callEnded) return;
+                  if (!callSid || callEnded) return;
 
                   // Skip duplicate transcripts
                   if (text === lastTranscript) return;
@@ -270,37 +323,12 @@ export function setupMediaStreamWebSocket(server: Server): void {
                     pendingFragment = '';
                   }
 
-                  // Barge-in: if assistant is speaking, clear the audio
-                  if (isSpeaking && streamSid) {
-                    ws.send(JSON.stringify({ event: 'clear', streamSid }));
-                    isSpeaking = false;
-                    logger.call(callSid, 'debug', 'Barge-in: cleared audio');
-                  }
-
-                  isProcessing = true;
-                  try {
-                    const response = await conversationService.processInput(callSid, fullText);
-
-                    if (callEnded) {
-                      logger.call(callSid, 'debug', 'Call ended during processing, skipping response');
-                      return;
-                    }
-
-                    if (response.text && streamSid) {
-                      isSpeaking = true;
-                      await streamTTSResponse(ws, streamSid, response.text, callSid, () => !callEnded);
-                    }
-
-                    if (response.shouldEnd && callSid) {
-                      await hangupCall(callSid);
-                    } else if (response.shouldTransfer && callSid) {
-                      await transferCall(callSid);
-                    }
-
-                  } catch (error) {
-                    logger.error('Error processing transcript', error);
-                  } finally {
-                    isProcessing = false;
+                  // Queue transcript and drain
+                  transcriptQueue.push(fullText);
+                  if (isProcessing) {
+                    logger.call(callSid, 'info', 'Transcript queued (processing busy)', { input: fullText, queueSize: transcriptQueue.length });
+                  } else {
+                    drainQueue();
                   }
                 },
                 onInterim: (text: string) => {

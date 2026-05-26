@@ -2,6 +2,20 @@
 
 Completed improvements, newest first.
 
+## 2026-05-26 — Transcript Queue
+
+**Problem:** The `isProcessing` flag silently dropped any caller speech that arrived while the assistant was processing a previous response. If the caller spoke during the LLM + TTS cycle (~5-10s), their input was lost entirely.
+
+**Solution:** Replaced the `isProcessing` boolean gate with a `transcriptQueue` array and `drainQueue()` loop. When a transcript arrives during processing, it's queued instead of dropped. After the current response finishes, the queue drains automatically — each queued transcript is processed sequentially with barge-in clearing any in-progress audio.
+
+- Extracted `handleTranscript()` for single-transcript processing (LLM → TTS → send)
+- `drainQueue()` runs the queue sequentially, checking `callEnded` between items
+- Logged as `"Transcript queued"` when busy, `"Processing queued transcript"` when draining
+- No risk of parallel LLM calls — the queue is drained serially
+
+**Files changed:**
+- `backend/src/routes/twilio.ts` — replaced `isProcessing` gate with `transcriptQueue` + `drainQueue()` + `handleTranscript()`
+
 ## 2026-05-26 — TTS Caching
 
 **Problem:** Identical phrases (greetings with the same patient name, retry prompts, goodbye responses) were regenerated via OpenAI TTS on every call, wasting ~1-5s and API credits each time.
