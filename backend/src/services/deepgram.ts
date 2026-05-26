@@ -20,7 +20,7 @@ export function createLiveTranscription(callbacks: DeepgramCallbacks): DeepgramC
         channels: 1,
 
         //model setting
-        model: 'nova-2',
+        model: 'nova-2-medical',
         language: 'en-US',
 
         //features
