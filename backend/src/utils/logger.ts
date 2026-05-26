@@ -1,5 +1,37 @@
 import type {LogLevel} from '../../types/index'
 
+// --- Betterstack (Logtail) transport ---
+const LOGTAIL_TOKEN = process.env.LOGTAIL_TOKEN;
+const LOGTAIL_URL = process.env.LOGTAIL_URL || 'https://s2467770.eu-fsn-3.betterstackdata.com';
+
+function sendToBetterstack(level: LogLevel, message: string, data?: unknown): void {
+  if (!LOGTAIL_TOKEN) return;
+
+  const payload = {
+    dt: new Date().toISOString(),
+    level,
+    message,
+    ...(data instanceof Error
+      ? { error: data.message, stack: data.stack }
+      : typeof data === 'object' && data !== null
+        ? data as Record<string, unknown>
+        : data !== undefined
+          ? { data }
+          : {}),
+  };
+
+  fetch(LOGTAIL_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${LOGTAIL_TOKEN}`,
+    },
+    body: JSON.stringify(payload),
+  }).catch(() => {
+    // non-critical — never block on logging
+  });
+}
+
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
@@ -63,18 +95,7 @@ function formatData(data: unknown): string {
   return String(data);
 }
 
-function log(level: LogLevel, message: string, data?: unknown): void {
-  if (!shouldLog(level)) {
-    return;
-  }
-  
-  const timestamp = formatTimestamp();
-  const color = levelColors[level];
-  const icon = levelIcons[level];
-  const formattedData = formatData(data);
-  
-  const output = `${colors.dim}${timestamp}${colors.reset} ${icon} ${color}[${level.toUpperCase()}]${colors.reset} ${message}${formattedData}`;
-  
+function logToConsole(level: LogLevel, output: string): void {
   if (level === 'error') {
     console.error(output);
   } else if (level === 'warn') {
@@ -82,6 +103,19 @@ function log(level: LogLevel, message: string, data?: unknown): void {
   } else {
     console.log(output);
   }
+}
+
+function log(level: LogLevel, message: string, data?: unknown): void {
+  if (!shouldLog(level)) return;
+
+  const timestamp = formatTimestamp();
+  const color = levelColors[level];
+  const icon = levelIcons[level];
+  const formattedData = formatData(data);
+  const output = `${colors.dim}${timestamp}${colors.reset} ${icon} ${color}[${level.toUpperCase()}]${colors.reset} ${message}${formattedData}`;
+
+  logToConsole(level, output);
+  sendToBetterstack(level, message, data);
 }
 
 function debug(message: string, data?: unknown): void {
@@ -101,8 +135,25 @@ function error(message: string, data?: unknown): void {
 }
 
 function call(callSid: string, level: LogLevel, message: string, data?: unknown): void {
+  if (!shouldLog(level)) return;
+
   const callPrefix = `${colors.cyan}[${callSid.substring(0, 8)}...]${colors.reset}`;
-  log(level, `${callPrefix} ${message}`, data);
+  const timestamp = formatTimestamp();
+  const color = levelColors[level];
+  const icon = levelIcons[level];
+  const formattedData = formatData(data);
+  const output = `${colors.dim}${timestamp}${colors.reset} ${icon} ${color}[${level.toUpperCase()}]${colors.reset} ${callPrefix} ${message}${formattedData}`;
+
+  logToConsole(level, output);
+
+  const bsData = data instanceof Error
+    ? { callSid, error: data.message, stack: data.stack }
+    : typeof data === 'object' && data !== null
+      ? { callSid, ...(data as Record<string, unknown>) }
+      : data !== undefined
+        ? { callSid, data }
+        : { callSid };
+  sendToBetterstack(level, message, bsData);
 }
 
 function apiTiming(
