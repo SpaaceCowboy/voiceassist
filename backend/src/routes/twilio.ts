@@ -234,8 +234,10 @@ export function setupMediaStreamWebSocket(server: Server): void {
           }
 
           if (response.shouldEnd && callSid) {
+            transcriptQueue.length = 0;
             await hangupCall(callSid);
           } else if (response.shouldTransfer && callSid) {
+            transcriptQueue.length = 0;
             await transferCall(callSid);
           }
         } catch (error) {
