@@ -205,6 +205,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let isSpeaking = false;
       let lastTranscript = '';
       let callEnded = false;
+      let pendingFragment = '';
 
       logger.info('Media stream WebSocket connected');
       
@@ -252,11 +253,20 @@ export function setupMediaStreamWebSocket(server: Server): void {
 
                   logger.call(callSid, 'info', 'Transcript', { text, confidence });
 
-                  // Skip low-confidence transcripts — bad STT poisons the LLM
+                  // Buffer low-confidence fragments and merge with next transcript
                   const MIN_CONFIDENCE = 0.6;
                   if (confidence < MIN_CONFIDENCE) {
-                    logger.call(callSid, 'warn', 'Low confidence transcript skipped', { text, confidence, threshold: MIN_CONFIDENCE });
+                    pendingFragment += (pendingFragment ? ' ' : '') + text;
+                    logger.call(callSid, 'warn', 'Low confidence transcript buffered', { text, confidence, threshold: MIN_CONFIDENCE });
                     return;
+                  }
+
+                  // Prepend any buffered fragments
+                  let fullText = text;
+                  if (pendingFragment) {
+                    fullText = pendingFragment + ' ' + text;
+                    logger.call(callSid, 'debug', 'Merged buffered fragment', { fragment: pendingFragment, merged: fullText });
+                    pendingFragment = '';
                   }
 
                   // Barge-in: if assistant is speaking, clear the audio
@@ -268,7 +278,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
 
                   isProcessing = true;
                   try {
-                    const response = await conversationService.processInput(callSid, text);
+                    const response = await conversationService.processInput(callSid, fullText, () => !callEnded);
 
                     if (callEnded) {
                       logger.call(callSid, 'debug', 'Call ended during processing, skipping response');

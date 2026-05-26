@@ -131,6 +131,7 @@ export async function generateGreeting(callSid: string): Promise<GreetingRespons
 export async function processInput(
   callSid: string,
   userInput: string,
+  isActive?: () => boolean,
 ): Promise<ConversationResponse> {
   const startTime = Date.now();
   logger.call(callSid, 'info', 'processing input', {input: userInput});
@@ -205,7 +206,11 @@ export async function processInput(
   // generate TTS audio
   let audio: Buffer | undefined;
   if (responseText) {
-    // Check if session still exists before expensive TTS call
+    // Skip TTS if call already ended or session was cleaned up
+    if (isActive && !isActive()) {
+      logger.call(callSid, 'info', 'Call ended before TTS, skipping');
+      return { text: responseText, shouldEnd, shouldTransfer, transferReason };
+    }
     const sessionStillActive = await redis.getSession(callSid);
     if (!sessionStillActive) {
       logger.call(callSid, 'warn', 'Session gone before TTS, skipping');
