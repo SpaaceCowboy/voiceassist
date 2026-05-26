@@ -168,9 +168,20 @@ export async function processInput(
   // handle function calls — loop to support chained tool use
   const MAX_TOOL_ROUNDS = 5;
   let currentResponse = response;
+  let lastToolKey = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS && currentResponse.functionCall; round++) {
     const { name, arguments: args, id } = currentResponse.functionCall;
+
+    // Detect duplicate tool calls (same name + same args back-to-back)
+    const toolKey = `${name}:${JSON.stringify(args)}`;
+    if (toolKey === lastToolKey) {
+      logger.call(callSid, 'warn', 'Duplicate tool call detected, breaking loop', { name, round });
+      responseText = "I'm sorry, I didn't quite catch that. Could you please repeat what you said?";
+      break;
+    }
+    lastToolKey = toolKey;
+
     logger.call(callSid, 'info', 'Function call', { name, args });
 
     const result = await executeFunctionCall(callSid, name, args);
@@ -191,10 +202,17 @@ export async function processInput(
     currentResponse = continueResponse;
   }
 
-  // generate TTS audio 
+  // generate TTS audio
   let audio: Buffer | undefined;
   if (responseText) {
-    try { 
+    // Check if session still exists before expensive TTS call
+    const sessionStillActive = await redis.getSession(callSid);
+    if (!sessionStillActive) {
+      logger.call(callSid, 'warn', 'Session gone before TTS, skipping');
+      return { text: responseText, shouldEnd, shouldTransfer, transferReason };
+    }
+
+    try {
       audio = await ttsService.textToSpeech(responseText);
     } catch (error) {
       logger.call(callSid, 'error', 'TTS generation failed', error);

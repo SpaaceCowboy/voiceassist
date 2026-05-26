@@ -204,6 +204,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let isProcessing = false;
       let isSpeaking = false;
       let lastTranscript = '';
+      let callEnded = false;
 
       logger.info('Media stream WebSocket connected');
       
@@ -243,13 +244,20 @@ export function setupMediaStreamWebSocket(server: Server): void {
               // Initialize Deepgram for transcription
               deepgramController = deepgramService.createLiveTranscription({
                 onTranscript: async (text: string, confidence: number) => {
-                  if (!callSid || isProcessing) return;
+                  if (!callSid || isProcessing || callEnded) return;
 
                   // Skip duplicate transcripts
                   if (text === lastTranscript) return;
                   lastTranscript = text;
 
                   logger.call(callSid, 'info', 'Transcript', { text, confidence });
+
+                  // Skip low-confidence transcripts — bad STT poisons the LLM
+                  const MIN_CONFIDENCE = 0.6;
+                  if (confidence < MIN_CONFIDENCE) {
+                    logger.call(callSid, 'warn', 'Low confidence transcript skipped', { text, confidence, threshold: MIN_CONFIDENCE });
+                    return;
+                  }
 
                   // Barge-in: if assistant is speaking, clear the audio
                   if (isSpeaking && streamSid) {
@@ -261,6 +269,11 @@ export function setupMediaStreamWebSocket(server: Server): void {
                   isProcessing = true;
                   try {
                     const response = await conversationService.processInput(callSid, text);
+
+                    if (callEnded) {
+                      logger.call(callSid, 'debug', 'Call ended during processing, skipping response');
+                      return;
+                    }
 
                     if (response.audio && streamSid) {
                       isSpeaking = true;
@@ -320,6 +333,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
               break;
 
             case 'stop':
+              callEnded = true;
               logger.info('Media stream stopped', { callSid });
               break;
           }
