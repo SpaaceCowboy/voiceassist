@@ -2,6 +2,20 @@
 
 Completed improvements, newest first.
 
+## 2026-05-26 — TTS Caching
+
+**Problem:** Identical phrases (greetings with the same patient name, retry prompts, goodbye responses) were regenerated via OpenAI TTS on every call, wasting ~1-5s and API credits each time.
+
+**Solution:** Added a Redis-backed cache layer in `textToSpeech()`. Before calling OpenAI, the text is hashed (SHA-256 of provider + voice + model + cleaned text) and checked against Redis. Cache hits return the stored mulaw buffer instantly. Misses generate normally and store the result with a 24-hour TTL.
+
+- Cache is transparent — all callers of `textToSpeech()` benefit automatically (greeting, streaming chunks, etc.)
+- Cache errors are silently ignored (non-critical path)
+- Key includes provider/voice/model so changing TTS config doesn't serve stale audio
+- Mulaw buffers are small (~8KB per second of audio), so Redis storage is minimal
+
+**Files changed:**
+- `backend/src/services/tts.ts` — added `getCached()`, `setCache()`, `getCacheKey()`, cache check in `textToSpeech()`
+
 ## 2026-05-26 — Streaming TTS
 
 **Problem:** Caller heard nothing for 2-5s while the full TTS response was generated. `processInput` waited for the entire audio buffer before sending any audio.

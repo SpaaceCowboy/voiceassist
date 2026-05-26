@@ -1,7 +1,7 @@
-//text to speech OpenAi and eleven labs
-
 import OpenAI from 'openai'
+import crypto from 'crypto'
 import { cleanTextForSpeech } from '../utils/helpers'
+import redis from '../config/redis'
 import logger from '../utils/logger';
 import type { TTSProvider, OpenAIVoice, OpenAITTSModel} from '../../types/index';
 
@@ -16,6 +16,39 @@ const OPENAI_VOICE: OpenAIVoice = (process.env.OPENAI_TTS_VOICE as OpenAIVoice) 
 const OPENAI_MODEL: OpenAITTSModel = ((process.env.OPENAI_TTS_MODEL as string) || 'tts-1').toLowerCase() as OpenAITTSModel
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
+
+// --- TTS cache ---
+const TTS_CACHE_PREFIX = 'tts:';
+const TTS_CACHE_TTL = 86400; // 24 hours
+
+function getCacheKey(text: string): string {
+  const cleaned = cleanTextForSpeech(text);
+  const hash = crypto.createHash('sha256').update(`${TTS_PROVIDER}:${OPENAI_VOICE}:${OPENAI_MODEL}:${cleaned}`).digest('hex').slice(0, 16);
+  return `${TTS_CACHE_PREFIX}${hash}`;
+}
+
+async function getCached(text: string): Promise<Buffer | null> {
+  try {
+    const key = getCacheKey(text);
+    const data = await redis.client.getBuffer(key);
+    if (data) {
+      logger.debug('TTS cache hit', { key });
+      return data;
+    }
+  } catch {
+    // cache miss or error — fall through to generation
+  }
+  return null;
+}
+
+async function setCache(text: string, audio: Buffer): Promise<void> {
+  try {
+    const key = getCacheKey(text);
+    await redis.client.setex(key, TTS_CACHE_TTL, audio);
+  } catch {
+    // non-critical — log nothing, just skip caching
+  }
+}
 
 // --- Mulaw encoding utilities ---
 
@@ -190,10 +223,15 @@ export async function elevenLabsTTSStream(text: string): Promise<NodeJS.Readable
 // generate speech using the configured provider
 
 export async function textToSpeech(text: string): Promise<Buffer> {
-    if (TTS_PROVIDER === 'elevenlabs') {
-        return elevenLabsTTS(text);
-    }
-    return openaiTTS(text)
+    const cached = await getCached(text);
+    if (cached) return cached;
+
+    const audio = TTS_PROVIDER === 'elevenlabs'
+        ? await elevenLabsTTS(text)
+        : await openaiTTS(text);
+
+    await setCache(text, audio);
+    return audio;
 }
 
 //stream generated speech
