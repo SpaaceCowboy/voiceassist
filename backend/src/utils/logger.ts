@@ -4,13 +4,25 @@ import type {LogLevel} from '../../types/index'
 const LOGTAIL_TOKEN = process.env.LOGTAIL_TOKEN;
 const LOGTAIL_URL = process.env.LOGTAIL_URL || 'https://s2467770.eu-fsn-3.betterstackdata.com';
 
+function formatForBetterstack(message: string, data?: unknown): string {
+  if (data === undefined || data === null) return message;
+  if (data instanceof Error) return `${message} — ${data.message}`;
+  if (typeof data === 'object') {
+    const summary = Object.entries(data as Record<string, unknown>)
+      .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+      .join(' ');
+    return `${message} | ${summary}`;
+  }
+  return `${message} — ${data}`;
+}
+
 function sendToBetterstack(level: LogLevel, message: string, data?: unknown): void {
   if (!LOGTAIL_TOKEN) return;
 
   const payload = {
     dt: new Date().toISOString(),
     level,
-    message,
+    message: formatForBetterstack(message, data),
     ...(data instanceof Error
       ? { error: data.message, stack: data.stack }
       : typeof data === 'object' && data !== null
