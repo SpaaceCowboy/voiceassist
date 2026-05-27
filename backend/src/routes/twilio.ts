@@ -329,6 +329,16 @@ export function setupMediaStreamWebSocket(server: Server): void {
                     return;
                   }
 
+                  // Buffer short incomplete utterances (e.g. "Wanna have", "I just")
+                  // even with high confidence — they're sentence fragments, not
+                  // actionable input. Wait for the rest to arrive.
+                  const looksComplete = /[.!?]$/.test(text.trim()) || wordCount >= 4;
+                  if (!looksComplete) {
+                    pendingFragment += (pendingFragment ? ' ' : '') + text;
+                    logger.call(callSid, 'info', 'Short incomplete utterance buffered', { text, wordCount });
+                    return;
+                  }
+
                   // Prepend any buffered fragments
                   let fullText = text;
                   if (pendingFragment) {
@@ -348,8 +358,15 @@ export function setupMediaStreamWebSocket(server: Server): void {
                       debounceBuffer = '';
                       debounceTimer = null;
                     }
-                    transcriptQueue.push(fullText);
-                    logger.call(callSid, 'info', 'Transcript queued (processing busy)', { input: fullText, queueSize: transcriptQueue.length });
+                    // Merge with last queued item instead of stacking separate entries
+                    // so "What is your services" + "on neurospine?" become one LLM call
+                    if (transcriptQueue.length > 0) {
+                      transcriptQueue[transcriptQueue.length - 1] += ' ' + fullText;
+                      logger.call(callSid, 'info', 'Transcript merged into queue', { input: transcriptQueue[transcriptQueue.length - 1], queueSize: transcriptQueue.length });
+                    } else {
+                      transcriptQueue.push(fullText);
+                      logger.call(callSid, 'info', 'Transcript queued (processing busy)', { input: fullText, queueSize: transcriptQueue.length });
+                    }
                   } else {
                     debounceBuffer += (debounceBuffer ? ' ' : '') + fullText;
                     if (debounceTimer) clearTimeout(debounceTimer);

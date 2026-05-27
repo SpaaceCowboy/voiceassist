@@ -88,7 +88,7 @@ export async function chat(
 
     const response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 500,
+      max_tokens: 200,
       system: systemPrompt,
       messages: claudeMessages,
       tools: claudeTools,
@@ -171,7 +171,7 @@ export async function continueAfterFunctionCall(
 
     const response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 500,
+      max_tokens: 200,
       system: systemPrompt,
       messages: claudeMessages,
       tools: claudeTools,
