@@ -1,8 +1,6 @@
 # NeuroSpine Voice Assistant
 
-AI-powered phone assistant for the NeuroSpine Institute — handles incoming calls via Twilio, transcribes speech with Deepgram, manages appointments through OpenAI function calling, and responds with text-to-speech.
-
-Built with Express.js, TypeScript, PostgreSQL, and Upstash Redis.
+AI-powered phone assistant for the NeuroSpine Institute — handles incoming calls via Twilio, transcribes speech with Deepgram, manages appointments through Claude (Anthropic) function calling, and responds with text-to-speech.
 
 ## Architecture
 
@@ -13,7 +11,7 @@ Phone Call → Twilio → WebSocket Media Stream
                               ↓
                     Conversation Service
                        ↙           ↘
-               OpenAI GPT-4o       PostgreSQL
+                Claude Haiku       PostgreSQL
            (Function Calling)     (Patients, Appointments,
                        ↘          Doctors, Departments)
                   TTS (OpenAI / ElevenLabs)
@@ -24,48 +22,72 @@ Phone Call → Twilio → WebSocket Media Stream
 ## Project Structure
 
 ```
-ByteForge-VoiceAssistant/
-├── src/
-│   ├── config/
-│   │   ├── database.ts        # PostgreSQL connection pool (pg)
-│   │   ├── redis.ts           # Upstash Redis (REST client)
-│   │   └── swagger.ts         # OpenAPI 3.0 spec configuration
-│   ├── functions/
-│   │   └── tools.ts           # OpenAI tool definitions + system prompt
-│   ├── middleware/
-│   │   ├── auth.ts            # JWT authentication + role-based access
-│   │   ├── twilioAuth.ts      # Twilio webhook signature validation
-│   │   ├── validate.ts        # Zod request validation schemas
-│   │   └── index.ts
-│   ├── models/
-│   │   ├── patient.ts         # Patient CRUD + history
-│   │   ├── appointment.ts     # Appointment scheduling + availability
-│   │   ├── callLog.ts         # Call logging + analytics
-│   │   ├── faq.ts             # FAQ lookup
-│   │   └── index.ts
-│   ├── routes/
-│   │   ├── twilio.ts          # Twilio webhooks + WebSocket media stream
-│   │   ├── api.ts             # REST API (appointments, patients, analytics)
-│   │   ├── auth.ts            # JWT login, register, setup
-│   │   └── index.ts
-│   ├── services/
-│   │   ├── conversation.ts    # Main orchestrator (call flow + function execution)
-│   │   ├── openai.ts          # LLM chat completions + analysis
-│   │   ├── deepgram.ts        # Live speech-to-text
-│   │   ├── tts.ts             # Text-to-speech (OpenAI / ElevenLabs)
-│   │   └── index.ts
-│   ├── utils/
-│   │   ├── helpers.ts         # Date/time parsing utilities
-│   │   └── logger.ts          # Structured logging
-│   └── server.ts              # Entry point
-├── types/
-│   └── index.ts               # TypeScript type definitions
-├── migrations/
-│   ├── 002_neurospine_clinic.sql   # Database schema
-│   └── seed_001_mock_data.sql      # Sample data
-├── package.json
-└── tsconfig.json
+voiceassist/
+├── backend/                   # Express + TypeScript API
+│   ├── src/
+│   │   ├── config/
+│   │   │   ├── database.ts        # PostgreSQL connection pool (pg)
+│   │   │   ├── redis.ts           # Upstash Redis (REST client)
+│   │   │   └── swagger.ts         # OpenAPI 3.0 spec configuration
+│   │   ├── functions/
+│   │   │   └── tools.ts           # Claude tool definitions + system prompt
+│   │   ├── middleware/
+│   │   │   ├── auth.ts            # JWT authentication + role-based access
+│   │   │   ├── twilioAuth.ts      # Twilio webhook signature validation
+│   │   │   ├── validate.ts        # Zod request validation schemas
+│   │   │   ├── requestLogger.ts   # HTTP request logging
+│   │   │   └── index.ts
+│   │   ├── models/
+│   │   │   ├── patient.ts         # Patient CRUD + history
+│   │   │   ├── appointment.ts     # Appointment scheduling + availability
+│   │   │   ├── callLog.ts         # Call logging + analytics
+│   │   │   ├── session.ts         # Conversation session persistence
+│   │   │   ├── faq.ts             # FAQ lookup
+│   │   │   └── index.ts
+│   │   ├── routes/
+│   │   │   ├── twilio.ts          # Twilio webhooks + WebSocket media stream
+│   │   │   ├── api.ts             # REST API (appointments, patients, analytics)
+│   │   │   ├── auth.ts            # JWT login, register, setup
+│   │   │   └── index.ts
+│   │   ├── services/
+│   │   │   ├── conversation.ts    # Main orchestrator (call flow + function execution)
+│   │   │   ├── llm.ts             # Claude (Anthropic) chat + tool use
+│   │   │   ├── openai.ts          # OpenAI for TTS + call analysis
+│   │   │   ├── deepgram.ts        # Live speech-to-text (nova-2-medical)
+│   │   │   ├── tts.ts             # Text-to-speech (OpenAI / ElevenLabs)
+│   │   │   └── index.ts
+│   │   ├── utils/
+│   │   │   ├── helpers.ts         # Date/time parsing utilities
+│   │   │   └── logger.ts          # Structured logging
+│   │   └── server.ts              # Entry point
+│   ├── types/
+│   │   └── index.ts               # TypeScript type definitions
+│   ├── migrations/
+│   │   ├── 002_neurospine_clinic.sql
+│   │   └── seed_001_mock_data.sql
+│   ├── package.json
+│   └── tsconfig.json
+├── frontend/                  # Next.js 16 (App Router) dashboard
+│   ├── app/                       # Route groups and pages
+│   ├── components/                # Feature-grouped UI components
+│   ├── lib/                       # Backend client, mock data
+│   ├── store/                     # Zustand stores (auth, ui)
+│   └── package.json
+├── docker-compose.yml         # Postgres + Redis + backend + frontend
+├── .env                       # Shared env vars for compose
+└── README.md
 ```
+
+## Tech Stack
+
+- **Backend**: Express.js, TypeScript, raw SQL (pg), Upstash Redis
+- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS, Zustand
+- **LLM**: Claude Haiku (Anthropic) with function calling
+- **STT**: Deepgram (nova-2-medical)
+- **TTS**: OpenAI or ElevenLabs
+- **Telephony**: Twilio (WebSocket media streams)
+- **Database**: PostgreSQL 16
+- **Cache/Sessions**: Upstash Redis (REST API)
 
 ## Prerequisites
 
@@ -73,79 +95,71 @@ ByteForge-VoiceAssistant/
 - PostgreSQL 14+
 - Twilio account with a phone number
 - Deepgram API key
-- OpenAI API key
+- Anthropic API key (Claude)
+- OpenAI API key (TTS + call analysis)
 - Upstash Redis instance (REST API)
 - (Optional) ElevenLabs API key for alternative TTS
 
 ## Quick Start
 
-### 1. Install Dependencies
+### Docker (recommended)
 
 ```bash
+cp .env.example .env   # configure env vars
+docker compose up --build
+```
+
+This starts Postgres, Redis, backend (port 4001), and frontend (port 3001).
+
+### Manual
+
+```bash
+# Backend
+cd backend
 npm install
-```
+npm run dev
 
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-```
-
-Required variables:
-
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/neurospine
-UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your-auth-token
-TWILIO_PHONE_NUMBER=+1234567890
-DEEPGRAM_API_KEY=your-deepgram-key
-OPENAI_API_KEY=your-openai-key
-JWT_SECRET=your-jwt-secret
-```
-
-### 3. Set Up Database
-
-```bash
-createdb neurospine
-psql -d neurospine -f migrations/002_neurospine_clinic.sql
-psql -d neurospine -f migrations/seed_001_mock_data.sql  # optional
-```
-
-### 4. Start Development Server
-
-```bash
+# Frontend (separate terminal)
+cd frontend
+npm install
 npm run dev
 ```
 
-### 5. Expose with ngrok (for Twilio webhooks)
+### Database Setup (manual only)
 
 ```bash
-ngrok http 3000
+createdb neurospine
+psql -d neurospine -f backend/migrations/002_neurospine_clinic.sql
+psql -d neurospine -f backend/migrations/seed_001_mock_data.sql  # optional
 ```
 
-### 6. Configure Twilio
+### Twilio Configuration
 
 1. Go to Twilio Console > Phone Numbers
 2. Select your phone number
 3. Set Voice Configuration:
    - **A Call Comes In**: Webhook
-   - **URL**: `https://your-ngrok-url/twilio/voice`
+   - **URL**: `https://your-domain/twilio/voice`
    - **Method**: POST
 4. Set Status Callback:
-   - **URL**: `https://your-ngrok-url/twilio/status`
+   - **URL**: `https://your-domain/twilio/status`
 
 ## Scripts
 
 ```bash
-npm run dev        # Hot-reload dev server (ts-node-dev)
-npm run build      # Compile TypeScript to dist/
-npm start          # Build + run production server
-npm run typecheck  # Type check only (tsc --noEmit)
-npm run lint       # ESLint
-npm test           # Run tests (Vitest)
-npm run test:watch # Run tests in watch mode
+# Backend (cd backend/)
+npm run dev          # Hot-reload dev server
+npm run build        # Compile TypeScript
+npm start            # Build + run production
+npm run typecheck    # tsc --noEmit
+npm run lint         # ESLint
+npm test             # Vitest
+npm run test:watch   # Vitest watch mode
+
+# Frontend (cd frontend/)
+npm run dev          # Next.js dev server
+npm run build        # Next.js production build
+npm run lint         # ESLint
 ```
 
 ## Environment Variables
@@ -159,10 +173,11 @@ npm run test:watch # Run tests in watch mode
 | `TWILIO_AUTH_TOKEN` | Twilio Auth Token | Yes |
 | `TWILIO_PHONE_NUMBER` | Your Twilio phone number | Yes |
 | `DEEPGRAM_API_KEY` | Deepgram API key | Yes |
-| `OPENAI_API_KEY` | OpenAI API key | Yes |
-| `JWT_SECRET` | Secret for JWT signing (required in production) | Yes |
+| `ANTHROPIC_API_KEY` | Anthropic API key (Claude LLM) | Yes |
+| `OPENAI_API_KEY` | OpenAI API key (TTS + analysis) | Yes |
+| `JWT_SECRET` | Secret for JWT signing | Yes |
 | `PORT` | Server port (default: 3000) | No |
-| `OPENAI_MODEL` | OpenAI model (default: gpt-4o) | No |
+| `LLM_MODEL` | Claude model (default: claude-haiku-4-5) | No |
 | `TTS_PROVIDER` | `openai` or `elevenlabs` (default: openai) | No |
 | `OPENAI_TTS_VOICE` | Voice for OpenAI TTS | No |
 | `ELEVENLABS_API_KEY` | ElevenLabs API key | No |
@@ -241,7 +256,7 @@ All `/api` routes require a valid JWT Bearer token.
 
 ## AI Function Calling
 
-During a phone call, the AI can invoke these tools:
+During a phone call, Claude can invoke these tools:
 
 | Function | Description |
 |----------|-------------|
@@ -295,7 +310,11 @@ Key tables (PostgreSQL):
 
 ## Production Deployment
 
+The backend is deployed on **Render**, the frontend on **Vercel**.
+
 ```bash
+# Manual backend deploy
+cd backend
 npm run build
 pm2 start dist/server.js --name neurospine-voice
 ```
