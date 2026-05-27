@@ -312,6 +312,15 @@ export function setupMediaStreamWebSocket(server: Server): void {
 
                   logger.call(callSid, 'info', 'Transcript', { text, confidence });
 
+                  // Record confidence for analytics
+                  const sid = callSid;
+                  redis.getSession(sid).then(s => {
+                    if (s?.metrics) {
+                      s.metrics.confidenceScores.push(confidence);
+                      redis.updateSession(sid, { metrics: s.metrics });
+                    }
+                  }).catch(() => {});
+
                   // Buffer low-confidence fragments and merge with next transcript
                   const MIN_CONFIDENCE = 0.6;
                   if (confidence < MIN_CONFIDENCE) {
@@ -524,6 +533,14 @@ async function streamTTSResponse(
 
   const duration = Date.now() - startTime;
   logger.call(callSid, 'info', 'Streaming TTS complete', { duration: `${duration}ms`, chunks: sentences.length });
+
+  // Track TTS chunks in session metrics
+  redis.getSession(callSid).then(s => {
+    if (s?.metrics) {
+      s.metrics.ttsChunks += sentences.length;
+      redis.updateSession(callSid, { metrics: s.metrics });
+    }
+  }).catch(() => {});
 }
 
 //hang up a call

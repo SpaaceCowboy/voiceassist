@@ -2,6 +2,11 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-05-27 — Fuzzy matching & call analytics
+
+- **Doctor name fuzzy matching** — `backend/src/services/conversation.ts`. Uses `pg_trgm` similarity to match misheard doctor names (e.g. Deepgram transcribes "Kamran" as "Cameron"). Falls back to fuzzy match (threshold 0.25) when exact LIKE fails. Also added fuzzy fallback for location names (threshold 0.2).
+- **Call analytics metrics** — `backend/src/models/callLog.ts`, `backend/src/routes/api.ts`, `backend/types/index.ts`, `backend/migrations/004_call_metrics.sql`. Added `metrics` JSONB column to `call_logs`. Per-call metrics (response times, tool calls with durations, STT confidence scores, LLM call count, TTS chunks) tracked in Redis session and saved at call end. New `GET /api/analytics/metrics` endpoint returns aggregates: avg/p95 response time, avg confidence, low-confidence rate, avg LLM calls per call, avg TTS chunks, and tool usage breakdown with counts and avg durations.
+
 ## 2026-05-26 — Voice pipeline reliability & performance
 
 - **STT confidence threshold + fragment buffering** — `backend/src/routes/twilio.ts`. Transcripts below 0.6 confidence are buffered and prepended to the next good transcript instead of being dropped. Prevents split sentences ("Can" + "we move it...") and garbage input to Claude.

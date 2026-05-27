@@ -3,8 +3,10 @@ import logger from '../utils/logger'
 import type {
     CallLog,
     CallStats,
+    CallMetrics,
     IntentBreakdown,
-    HourlyDistribution
+    HourlyDistribution,
+    AggregateMetrics,
 } from '../../types/index'
 
 //create a new log entry when the call starts
@@ -36,6 +38,7 @@ export async function completeCall(
         sentiment?: string;
         sentimentScore?: number;
         reservationId?: number;
+        metrics?: CallMetrics;
     }
 ): Promise<CallLog | null> {
     const result = await db.query<CallLog>(
@@ -49,6 +52,7 @@ export async function completeCall(
         sentiment = $7,
         sentiment_score = $8,
         appointment_id = $9,
+        metrics = $10,
         updated_at = CURRENT_TIMESTAMP
       WHERE call_sid = $1
       RETURNING *`,
@@ -61,7 +65,8 @@ export async function completeCall(
         data.intent || null,
         data.sentiment || null,
         data.sentimentScore || null,
-        data.reservationId || null
+        data.reservationId || null,
+        data.metrics ? JSON.stringify(data.metrics) : null,
       ]
     )
 
@@ -304,6 +309,97 @@ export async function getStats(
     return result.rows
   }
 
+  export async function getAggregateMetrics(
+    startDate: string,
+    endDate: string
+  ): Promise<AggregateMetrics> {
+    const result = await db.query<{
+      calls_with_metrics: string;
+      all_response_times: number[][] | null;
+      all_confidence_scores: number[][] | null;
+      all_tool_calls: { name: string; durationMs: number }[][] | null;
+      avg_llm_calls: string;
+      avg_tts_chunks: string;
+    }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE metrics IS NOT NULL) AS calls_with_metrics,
+         array_agg(metrics->'responseTimes') FILTER (WHERE metrics IS NOT NULL) AS all_response_times,
+         array_agg(metrics->'confidenceScores') FILTER (WHERE metrics IS NOT NULL) AS all_confidence_scores,
+         array_agg(metrics->'toolCalls') FILTER (WHERE metrics IS NOT NULL) AS all_tool_calls,
+         AVG((metrics->>'llmCalls')::numeric) FILTER (WHERE metrics IS NOT NULL) AS avg_llm_calls,
+         AVG((metrics->>'ttsChunks')::numeric) FILTER (WHERE metrics IS NOT NULL) AS avg_tts_chunks
+       FROM call_logs
+       WHERE started_at >= $1::date
+         AND started_at < ($2::date + INTERVAL '1 day')`,
+      [startDate, endDate]
+    );
+
+    const row = result.rows[0];
+    const callCount = parseInt(row.calls_with_metrics) || 0;
+
+    if (callCount === 0) {
+      return {
+        callsWithMetrics: 0,
+        avgResponseTimeMs: 0,
+        p95ResponseTimeMs: 0,
+        avgConfidence: 0,
+        lowConfidenceRate: 0,
+        avgLlmCallsPerCall: 0,
+        avgTtsChunksPerCall: 0,
+        toolUsage: [],
+      };
+    }
+
+    // Flatten arrays from all calls
+    const allTimes = (row.all_response_times || []).flat().filter(Boolean).map(Number);
+    const allConfidences = (row.all_confidence_scores || []).flat().filter(Boolean).map(Number);
+    const allTools = (row.all_tool_calls || []).flat().filter(Boolean);
+
+    // Response time stats
+    allTimes.sort((a, b) => a - b);
+    const avgResponseTime = allTimes.length > 0
+      ? allTimes.reduce((s, t) => s + t, 0) / allTimes.length
+      : 0;
+    const p95Index = Math.floor(allTimes.length * 0.95);
+    const p95ResponseTime = allTimes.length > 0 ? allTimes[p95Index] || allTimes[allTimes.length - 1] : 0;
+
+    // Confidence stats
+    const avgConfidence = allConfidences.length > 0
+      ? allConfidences.reduce((s, c) => s + c, 0) / allConfidences.length
+      : 0;
+    const lowConfidenceCount = allConfidences.filter(c => c < 0.6).length;
+    const lowConfidenceRate = allConfidences.length > 0
+      ? lowConfidenceCount / allConfidences.length
+      : 0;
+
+    // Tool usage breakdown
+    const toolMap = new Map<string, { count: number; totalMs: number }>();
+    for (const tc of allTools) {
+      const entry = toolMap.get(tc.name) || { count: 0, totalMs: 0 };
+      entry.count += 1;
+      entry.totalMs += tc.durationMs || 0;
+      toolMap.set(tc.name, entry);
+    }
+    const toolUsage = Array.from(toolMap.entries())
+      .map(([name, { count, totalMs }]) => ({
+        name,
+        count,
+        avgDurationMs: Math.round(totalMs / count),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      callsWithMetrics: callCount,
+      avgResponseTimeMs: Math.round(avgResponseTime),
+      p95ResponseTimeMs: Math.round(p95ResponseTime),
+      avgConfidence: Math.round(avgConfidence * 1000) / 1000,
+      lowConfidenceRate: Math.round(lowConfidenceRate * 1000) / 1000,
+      avgLlmCallsPerCall: Math.round(parseFloat(row.avg_llm_calls || '0') * 10) / 10,
+      avgTtsChunksPerCall: Math.round(parseFloat(row.avg_tts_chunks || '0') * 10) / 10,
+      toolUsage,
+    };
+  }
+
   export default {
     create,
     completeCall,
@@ -320,4 +416,5 @@ export async function getStats(
     getIntentBreakdown,
     getHourlyDistribution,
     getSentimentTrend,
+    getAggregateMetrics,
   };

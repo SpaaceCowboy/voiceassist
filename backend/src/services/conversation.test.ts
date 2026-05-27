@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
     setSession: vi.fn(),
     getSession: vi.fn(),
     addMessage: vi.fn(),
+    updateSession: vi.fn(),
     updateSessionState: vi.fn(),
     deleteSession: vi.fn(),
   },
@@ -93,6 +94,13 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     },
     messageHistory: [],
     collectedData: {},
+    metrics: {
+      responseTimes: [],
+      toolCalls: [],
+      confidenceScores: [],
+      llmCalls: 0,
+      ttsChunks: 0,
+    },
     createdAt: new Date(),
     ...overrides,
   };
@@ -273,26 +281,13 @@ describe('processInput', () => {
         arguments: { reason: 'complex_request' },
       },
     });
-    m.openaiService.continueAfterFunctionCall.mockResolvedValueOnce({
-      content: 'Transferring you now.',
-      functionCall: null,
-      usage: null,
-    });
-
     const result = await processInput('CA123', 'speak to a person please');
 
     expect(result.shouldTransfer).toBe(true);
     expect(result.transferReason).toBe('complex_request');
     expect(result.shouldEnd).toBe(false);
-    expect(result.text).toBe('Transferring you now.');
-
-    expect(m.openaiService.continueAfterFunctionCall).toHaveBeenCalledWith(
-      session.messageHistory,
-      'transfer_to_staff',
-      expect.objectContaining({ shouldTransfer: true, transferReason: 'complex_request' }),
-      'tool-1',
-      expect.any(Object),
-    );
+    expect(result.text).toBe('Transferring you now. Please hold.');
+    expect(m.openaiService.continueAfterFunctionCall).not.toHaveBeenCalled();
   });
 
   it('executes end_call and propagates shouldEnd', async () => {
@@ -307,20 +302,18 @@ describe('processInput', () => {
       content: null,
       functionCall: { id: 't', name: 'end_call', arguments: { reason: 'patient_goodbye' } },
     });
-    m.openaiService.continueAfterFunctionCall.mockResolvedValueOnce({
-      content: 'Have a great day!',
-      functionCall: null,
-      usage: null,
-    });
-
     const result = await processInput('CA123', 'bye');
 
     expect(result.shouldEnd).toBe(true);
-    expect(result.text).toBe('Have a great day!');
-    // end_call invokes call-log completion + session cleanup
-    expect(m.callLogModel.completeCall).toHaveBeenCalled();
-    expect(m.sessionModel.markInactive).toHaveBeenCalledWith('CA123');
-    expect(m.redis.deleteSession).toHaveBeenCalledWith('CA123');
+    expect(result.text).toBe('Thank you for calling. Goodbye.');
+    expect(m.openaiService.continueAfterFunctionCall).not.toHaveBeenCalled();
+    expect(m.redis.updateSessionState).toHaveBeenCalledWith('CA123', {
+      currentStep: 'ending',
+      endRequested: true,
+    });
+    expect(m.callLogModel.completeCall).not.toHaveBeenCalled();
+    expect(m.sessionModel.markInactive).not.toHaveBeenCalled();
+    expect(m.redis.deleteSession).not.toHaveBeenCalled();
   });
 
   it('breaks tool loop on duplicate back-to-back tool calls', async () => {
@@ -412,6 +405,11 @@ describe('handleCallEnded', () => {
       status: 'completed',
       durationSeconds: 42,
       transcript: '[user]: hi\n[assistant]: hello!',
+      summary: 'summary',
+      intent: 'booking',
+      sentiment: 'positive',
+      sentimentScore: 0.8,
+      metrics: session.metrics,
     });
     expect(m.sessionModel.markInactive).toHaveBeenCalledWith('CA123');
     expect(m.redis.deleteSession).toHaveBeenCalledWith('CA123');

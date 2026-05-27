@@ -905,6 +905,49 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /api/analytics/metrics:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Aggregate call performance metrics
+ *     description: Response times, tool usage, STT confidence distribution, and LLM/TTS stats
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: start_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: end_date
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Aggregate performance metrics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ */
+router.get(
+  '/analytics/metrics',
+  validateQuery(dateRangeQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { start_date, end_date } = req.query;
+
+    const startDate = (start_date as string) || getDateDaysAgo(30);
+    const endDate = (end_date as string) || getCurrentDate();
+
+    const metrics = await callLogModel.getAggregateMetrics(startDate, endDate);
+
+    res.json({ success: true, data: metrics });
+  })
+);
+
 // ===========================================
 // SESSION MANAGEMENT (moderator only)
 // ===========================================

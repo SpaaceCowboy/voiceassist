@@ -60,6 +60,13 @@ export async function initializeConversation(
       },
       messageHistory: [],
       collectedData: {},
+      metrics: {
+        responseTimes: [],
+        toolCalls: [],
+        confidenceScores: [],
+        llmCalls: 0,
+        ttsChunks: 0,
+      },
       createdAt: new Date(),
     };
 
@@ -193,11 +200,24 @@ export async function processInput(
 
     logger.call(callSid, 'info', 'Function call', { name, args });
 
+    const toolStart = Date.now();
     const result = await executeFunctionCall(callSid, name, args);
+    const toolDuration = Date.now() - toolStart;
+    updatedSession.metrics.toolCalls.push({ name, durationMs: toolDuration });
 
     shouldEnd = shouldEnd || result.shouldEnd || false;
     shouldTransfer = shouldTransfer || result.shouldTransfer || false;
     transferReason = transferReason || result.transferReason;
+
+    if (result.shouldEnd) {
+      responseText = "Thank you for calling. Goodbye.";
+      break;
+    }
+
+    if (result.shouldTransfer) {
+      responseText = "Transferring you now. Please hold.";
+      break;
+    }
 
     const continueResponse = await openaiService.continueAfterFunctionCall(
       updatedSession.messageHistory,
@@ -211,6 +231,12 @@ export async function processInput(
     currentResponse = continueResponse;
   }
 
+  // Track metrics
+  const duration = Date.now() - startTime;
+  updatedSession.metrics.responseTimes.push(duration);
+  updatedSession.metrics.llmCalls += 1 + updatedSession.metrics.toolCalls.length;
+  await redis.updateSession(callSid, { metrics: updatedSession.metrics });
+
   // Persist response (TTS is now handled by the route layer for streaming)
   if (responseText) {
     await redis.addMessage(callSid, {
@@ -223,7 +249,6 @@ export async function processInput(
     await callLogModel.appendToTranscript(callSid, 'assistant', responseText);
   }
 
-  const duration = Date.now() - startTime;
   logger.call(callSid, 'info', 'Processing complete', {duration: `${duration}ms`})
 
   return {
@@ -713,49 +738,18 @@ async function handleTransfer(
 
 async function handleEndCall(
   callSid: string,
-  session: Session
+  _session: Session
 ): Promise<FunctionExecutionResult> {
-  const refreshedSession = await redis.getSession(callSid);
-  const transcript = (refreshedSession?.messageHistory || [])
-    .map(m => `[${m.role}]: ${m.content}`)
-    .join('\n');
+  await redis.updateSessionState(callSid, {
+    currentStep: 'ending',
+    endRequested: true,
+  });
 
-  let summary = '';
-  let intent = 'unknown';
-  let sentiment = { sentiment: 'neutral', score: 0 };
-
-  try {
-    const [summaryResult, intentResult, sentimentResult] = await Promise.all([
-      openaiService.generateCallSummary(transcript),
-      openaiService.detectIntent(transcript),
-      openaiService.analyzeSentiment(transcript),
-    ]);
-    summary = summaryResult;
-    intent = intentResult;
-    sentiment = sentimentResult;
-  } catch (error) {
-    logger.error('Failed to generate call analysis', error);
+  return {
+    success: true,
+    data: { ending: true},
+    shouldEnd: true
   }
-
-  //complete the call log
-  await callLogModel.completeCall(callSid, {
-    status: 'completed',
-    transcript,
-    summary,
-    intent,
-    sentiment: sentiment.sentiment,
-    sentimentScore: sentiment.score,
-  })
-
- //delete session
- await sessionModel.markInactive(callSid);
- await redis.deleteSession(callSid);
-
- return {
-  success: true,
-  data: { ending: true},
-  shouldEnd: true
- }
 }
 
 //call ended handler 
@@ -773,13 +767,35 @@ export async function handleCallEnded(
 
   if (session) {
     const transcript = session.messageHistory
-    .map(m => `[${m.role}]: ${m.content}`)
-    .join('\n');
+      .map(m => `[${m.role}]: ${m.content}`)
+      .join('\n');
+
+    let summary = '';
+    let intent = 'unknown';
+    let sentiment = { sentiment: 'neutral', score: 0 };
+
+    try {
+      const [summaryResult, intentResult, sentimentResult] = await Promise.all([
+        openaiService.generateCallSummary(transcript),
+        openaiService.detectIntent(transcript),
+        openaiService.analyzeSentiment(transcript),
+      ]);
+      summary = summaryResult;
+      intent = intentResult;
+      sentiment = sentimentResult;
+    } catch (error) {
+      logger.error('Failed to generate call analysis', error);
+    }
 
     await callLogModel.completeCall(callSid, {
       status: data.status,
       durationSeconds: data.duration,
       transcript,
+      summary,
+      intent,
+      sentiment: sentiment.sentiment,
+      sentimentScore: sentiment.score,
+      metrics: session.metrics,
     });
   }
 
@@ -789,14 +805,35 @@ export async function handleCallEnded(
 }
 
 async function findDoctorByName(name: string): Promise<Doctor | null> {
-  const result = await db.query<Doctor>(
+  // Exact substring match first (fast path)
+  const exact = await db.query<Doctor>(
     `SELECT * FROM doctors
      WHERE is_active = true
        AND LOWER(full_name) LIKE $1
      LIMIT 1`,
     [`%${name.toLowerCase()}%`]
   );
-  return result.rows[0] || null;
+  if (exact.rows[0]) return exact.rows[0];
+
+  // Fuzzy match using pg_trgm similarity for misheard names
+  // (e.g. Deepgram transcribes "Kamran" as "Cameron")
+  const fuzzy = await db.query<Doctor & { sim: number }>(
+    `SELECT *, similarity(LOWER(full_name), $1) AS sim
+     FROM doctors
+     WHERE is_active = true
+       AND similarity(LOWER(full_name), $1) > 0.25
+     ORDER BY sim DESC
+     LIMIT 1`,
+    [name.toLowerCase()]
+  );
+  if (fuzzy.rows[0]) {
+    logger.info('Fuzzy doctor name match', {
+      input: name,
+      matched: fuzzy.rows[0].full_name,
+      similarity: fuzzy.rows[0].sim,
+    });
+  }
+  return fuzzy.rows[0] || null;
 }
 
 async function findDepartmentByName(name: string): Promise<Department | null> {
@@ -811,13 +848,33 @@ async function findDepartmentByName(name: string): Promise<Department | null> {
 }
 
 async function findLocationByName(name: string): Promise<Location | null> {
-  const result = await db.query<Location>(
+  const exact = await db.query<Location>(
     `SELECT * FROM locations
      WHERE is_active = true
        AND LOWER(name) LIKE $1
      LIMIT 1`,
     [`%${name.toLowerCase()}%`]
   );
+  if (exact.rows[0]) return exact.rows[0];
+
+  // Fuzzy match for misheard location names (e.g. "Tonga" → "Thousand Oaks")
+  const fuzzy = await db.query<Location & { sim: number }>(
+    `SELECT *, similarity(LOWER(name), $1) AS sim
+     FROM locations
+     WHERE is_active = true
+       AND similarity(LOWER(name), $1) > 0.2
+     ORDER BY sim DESC
+     LIMIT 1`,
+    [name.toLowerCase()]
+  );
+  if (fuzzy.rows[0]) {
+    logger.info('Fuzzy location name match', {
+      input: name,
+      matched: fuzzy.rows[0].name,
+      similarity: fuzzy.rows[0].sim,
+    });
+  }
+  const result = fuzzy;
   return result.rows[0] || null;
 }
 

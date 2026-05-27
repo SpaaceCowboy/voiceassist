@@ -346,6 +346,14 @@ export interface ToolCall {
   };
 }
 
+export interface CallMetrics {
+  responseTimes: number[];
+  toolCalls: { name: string; durationMs: number }[];
+  confidenceScores: number[];
+  llmCalls: number;
+  ttsChunks: number;
+}
+
 export interface Session {
   callSid: string;
   patient: Patient | null;
@@ -353,6 +361,7 @@ export interface Session {
   state: SessionState;
   messageHistory: Message[];
   collectedData: CollectedData;
+  metrics: CallMetrics;
   createdAt: Date;
 }
 
@@ -565,6 +574,17 @@ export interface IntentBreakdown {
 export interface HourlyDistribution {
   hour: number;
   call_count: string;
+}
+
+export interface AggregateMetrics {
+  callsWithMetrics: number;
+  avgResponseTimeMs: number;
+  p95ResponseTimeMs: number;
+  avgConfidence: number;
+  lowConfidenceRate: number;
+  avgLlmCallsPerCall: number;
+  avgTtsChunksPerCall: number;
+  toolUsage: { name: string; count: number; avgDurationMs: number }[];
 }
 
 // -------------------------------------------
