@@ -9,6 +9,9 @@ export const requestLogger = (
   const startTime = Date.now();
 
   res.on('finish', () => {
+    // Skip health check pings (Render hits GET / every ~30s)
+    if (req.method === 'GET' && req.path === '/') return;
+
     const durationMs = Date.now() - startTime;
     // Log path only — req.originalUrl includes the query string, which can
     // leak tokens or PHI if a caller ever passes them as query params.
