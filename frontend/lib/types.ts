@@ -159,16 +159,53 @@ export interface SessionStats {
 
 export interface IntentAnalytics {
   intent: string;
-  count: number;
-  percentage: number;
-  avg_duration_seconds: number;
+  count: number | string;
+  percentage: number | string;
+  // Not emitted by `/api/analytics/intents`; kept optional for compatibility.
+  avg_duration_seconds?: number;
 }
 
 export interface HourlyAnalytics {
   hour: number;
-  calls: number;
-  appointments: number;
-  transfers: number;
+  // Backend `/api/analytics/hourly` returns { hour, call_count }.
+  call_count?: number;
+  // Legacy/optional fields (not emitted by the current backend).
+  calls?: number;
+  appointments?: number;
+  transfers?: number;
+}
+
+/** Backend `/api/analytics/overview` response (Postgres returns counts as strings). */
+export interface AnalyticsOverviewFull {
+  period?: { start?: string; end?: string };
+  calls?: {
+    total_calls?: string | number;
+    completed_calls?: string | number;
+    avg_duration?: string | number;
+    transferred_calls?: string | number;
+    calls_with_errors?: string | number;
+  };
+  appointments?: {
+    total?: string | number;
+    scheduled?: string | number;
+    confirmed?: string | number;
+    completed?: string | number;
+    cancelled?: string | number;
+    no_shows?: string | number;
+    from_ai?: string | number;
+  };
+}
+
+/** Backend `/api/analytics/metrics` response. */
+export interface AggregateMetrics {
+  callsWithMetrics: number;
+  avgResponseTimeMs: number;
+  p95ResponseTimeMs: number;
+  avgConfidence: number;
+  lowConfidenceRate: number;
+  avgLlmCallsPerCall: number;
+  avgTtsChunksPerCall: number;
+  toolUsage: Array<{ name: string; count: number; avgDurationMs: number }>;
 }
 
 // Type aliases for backward compatibility

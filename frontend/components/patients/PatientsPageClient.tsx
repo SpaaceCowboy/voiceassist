@@ -82,7 +82,18 @@ export default function PatientsPageClient() {
       />
 
       {error ? <ErrorCard message={error} /> : null}
-      {loading ? <SkeletonTable rows={6} /> : <PatientsTable rows={rows} />}
+      {loading ? (
+        <SkeletonTable rows={6} />
+      ) : !q.trim() ? (
+        <div
+          className="rounded-md border p-8 text-center text-sm"
+          style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+        >
+          Start typing a name or phone number to search for patients.
+        </div>
+      ) : (
+        <PatientsTable rows={rows} />
+      )}
     </div>
   );
 }

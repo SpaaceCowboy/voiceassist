@@ -1,7 +1,7 @@
 # docker-compose.yml
 
 services:
-  # 1. PostgreSQL Database Service (No changes here)
+  # 1. PostgreSQL Database Service
   postgres:
     image: postgres:16-alpine
     container_name: neurospine-db
@@ -11,7 +11,6 @@ services:
       POSTGRES_DB: ${DB_NAME}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -19,12 +18,11 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # 2. NEW: Redis Service
+  # 2. Redis Service
   redis:
     image: redis:7-alpine
     container_name: neurospine-redis
     volumes:
-      # This makes the redis data persistent
       - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -33,7 +31,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # 3. Backend API Service (Updated `depends_on`)
+  # 3. Backend API Service
   backend:
     build:
       context: ./backend
@@ -53,15 +51,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis: # <-- ADDED DEPENDENCY
-        condition: service_healthy # <-- ADDED DEPENDENCY
+      redis:
+        condition: service_healthy
     restart: unless-stopped
-    # volumes:
-    #   - ./backend:/app
-    #   - /app/node_modules
-    # command: npm run dev
 
-  # 4. Frontend Web Service (No changes here)
+  # 4. Frontend Web Service
   frontend:
     build:
       context: ./frontend
@@ -79,5 +73,4 @@ services:
 
 volumes:
   postgres-data:
-  redis-data: # <-- ADDED VOLUME
-
+  redis-data:

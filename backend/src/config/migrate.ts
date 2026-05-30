@@ -10,7 +10,7 @@ const MIGRATIONS_DIR = path.resolve(process.cwd(), 'migrations');
 const MIGRATION_FILES = [
   '002_neurospine_clinic.sql',
   '003_patient_search_trgm.sql',
-  'seed_001_mock_data.sql',
+'004_call_metrics.sql'
 ];
 
 async function ensureMigrationsTable(): Promise<void> {

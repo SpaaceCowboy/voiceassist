@@ -50,9 +50,25 @@ export const usePatientsStore = create<Store>((set, get) => ({
 
   refresh: async () => {
     const s = get();
+    const query = s.q.trim();
     const key = makeKey(s.q, s.limit, s.offset);
 
     if (s.lastFetchedAt && s.lastKey === key && Date.now() - s.lastFetchedAt < CACHE_TTL_MS) {
+      return;
+    }
+
+    // The backend /patients/search endpoint requires a non-empty `q`
+    // (q: z.string().min(1)). With no search term, skip the request and show
+    // an empty result instead of triggering a 400 "Invalid query parameters".
+    if (!query) {
+      set({
+        rows: [],
+        count: 0,
+        loading: false,
+        error: null,
+        lastFetchedAt: Date.now(),
+        lastKey: key,
+      });
       return;
     }
 
@@ -60,7 +76,7 @@ export const usePatientsStore = create<Store>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const res = await searchPatients({
-        q: s.q.trim() || undefined,
+        q: query,
         limit: s.limit,
         offset: s.offset,
       });

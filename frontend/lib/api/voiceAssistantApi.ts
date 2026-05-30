@@ -15,6 +15,7 @@ import type {
   SessionStats,
   IntentAnalytics,
   HourlyAnalytics,
+  AggregateMetrics,
   FaqItem,
   User,
   ReservationListItem,
@@ -119,6 +120,11 @@ export const getIntentAnalytics = () =>
 export const getHourlyAnalytics = () =>
   backendGet<{ success: boolean; data: HourlyAnalytics[] }>(
     `/api/analytics/hourly`,
+  );
+
+export const getAnalyticsMetrics = () =>
+  backendGet<{ success: boolean; data: AggregateMetrics }>(
+    `/api/analytics/metrics`,
   );
 
 // FAQs

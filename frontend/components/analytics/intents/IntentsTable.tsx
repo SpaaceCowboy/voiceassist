@@ -1,40 +1,26 @@
 // Path: components/analytics/intents/IntentsTable.tsx
-import { TableShell, THead, TH, TR, TD } from "@/components/ui/TableShell";
+import { ChartCard, BarList } from "@/components/ui/charts";
+import { toNum, fmtPercent, humanize } from "@/lib/format";
 import type { IntentAnalytics } from "@/lib/types";
 
 export function IntentsTable({ rows }: { rows: IntentAnalytics[] }) {
+  const items = rows
+    .map((r) => ({
+      label: humanize(r.intent),
+      value: toNum(r.count) ?? 0,
+      pct: toNum(r.percentage),
+    }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .map((r) => ({
+      label: r.label,
+      value: r.value,
+      hint: `${r.value.toLocaleString()}${r.pct != null ? ` · ${fmtPercent(r.pct)}` : ""}`,
+    }));
+
   return (
-    <div className="space-y-2">
-      <div className="text-sm font-semibold">Intent breakdown</div>
-      <TableShell>
-        <THead>
-          <tr>
-            <TH>Intent</TH>
-            <TH>Count</TH>
-            <TH>Percentage</TH>
-            <TH>Avg Duration (s)</TH>
-          </tr>
-        </THead>
-        <tbody>
-          {rows.map((r, idx) => (
-            <TR key={`${r.intent}-${idx}`}>
-              <TD className="font-medium">{r.intent}</TD>
-              <TD>{r.count}</TD>
-              <TD>{r.percentage}%</TD>
-              <TD>{r.avg_duration_seconds}</TD>
-            </TR>
-          ))}
-          {rows.length === 0 ? (
-            <TR>
-              <TD colSpan={4} className="p-6 text-center">
-                <span className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-                  No intent data.
-                </span>
-              </TD>
-            </TR>
-          ) : null}
-        </tbody>
-      </TableShell>
-    </div>
+    <ChartCard title="Intent breakdown" subtitle="Detected caller intent across the period">
+      <BarList items={items} colorful emptyText="No intent data for this range." />
+    </ChartCard>
   );
 }

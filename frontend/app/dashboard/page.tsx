@@ -1,9 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardHeader } from "@/components/ui/Card";
 import { backendGet } from "@/lib/backend";
 import { GlobalSearch } from "@/components/dashboard/GlobalSearch";
+import {
+  KpiCard,
+  ChartCard,
+  BarList,
+  HourBars,
+  Donut,
+  StatRing,
+  SERIES_COLORS,
+  type DonutSegment,
+} from "@/components/ui/charts";
+import {
+  PhoneIcon,
+  CalendarIcon,
+  TransferIcon,
+  AlertIcon,
+  ClockIcon,
+  CheckCircleIcon,
+} from "@/components/ui/icons";
+import { toNum, fmtInt, fmtDuration, fmtPercent, humanize } from "@/lib/format";
 
 type Envelope<T> = { success?: boolean; data?: T } | T;
 
@@ -22,6 +40,8 @@ type OverviewData = {
     confirmed?: string | number;
     completed?: string | number;
     cancelled?: string | number;
+    no_shows?: string | number;
+    from_ai?: string | number;
   };
 };
 
@@ -30,17 +50,6 @@ type HourlyRow = { hour?: string | number; call_count?: string | number };
 
 function unwrap<T>(res: Envelope<T>): T {
   return (res as { data?: T })?.data ?? (res as T);
-}
-
-function StatCard({ label, value }: { label: string; value: unknown }) {
-  return (
-    <Card className="p-4">
-      <div className="text-xs mb-1" style={{ color: "rgb(var(--muted))" }}>
-        {label}
-      </div>
-      <div className="text-2xl font-semibold">{String(value ?? "—")}</div>
-    </Card>
-  );
 }
 
 export default function DashboardPage() {
@@ -78,72 +87,153 @@ export default function DashboardPage() {
   const a = overview.appointments ?? {};
   const period = overview.period;
 
+  const totalCalls = toNum(c.total_calls) ?? 0;
+  const completedCalls = toNum(c.completed_calls) ?? 0;
+  const transfers = toNum(c.transferred_calls) ?? 0;
+  const errors = toNum(c.calls_with_errors) ?? 0;
+  const completionRate = totalCalls > 0 ? (completedCalls / totalCalls) * 100 : 0;
+
+  const intentItems = intents
+    .map((r) => ({ label: humanize(r.intent), value: toNum(r.count) ?? 0, pct: toNum(r.percentage) }))
+    .filter((r) => r.value > 0)
+    .slice(0, 7)
+    .map((r) => ({
+      label: r.label,
+      value: r.value,
+      hint: `${r.value.toLocaleString()}${r.pct != null ? ` · ${fmtPercent(r.pct)}` : ""}`,
+    }));
+
+  const hourData = hourly.map((r) => ({
+    hour: toNum(r.hour) ?? 0,
+    value: toNum(r.call_count) ?? 0,
+  }));
+
+  // Appointment status composition
+  const apptSegments: DonutSegment[] = [
+    { label: "Scheduled", value: toNum(a.scheduled) ?? 0, color: SERIES_COLORS[1] },
+    { label: "Confirmed", value: toNum(a.confirmed) ?? 0, color: SERIES_COLORS[0] },
+    { label: "Completed", value: toNum(a.completed) ?? 0, color: SERIES_COLORS[2] },
+    { label: "Cancelled", value: toNum(a.cancelled) ?? 0, color: SERIES_COLORS[4] },
+    { label: "No-show", value: toNum(a.no_shows) ?? 0, color: SERIES_COLORS[3] },
+  ].filter((s) => s.value > 0);
+  const apptTotal = toNum(a.total) ?? apptSegments.reduce((s, x) => s + x.value, 0);
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader
-          title="Dashboard"
-          subtitle={
-            period?.start && period?.end
-              ? `Snapshot ${period.start} → ${period.end}`
-              : "Live snapshot from backend analytics."
-          }
-        />
-      </Card>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
+            {period?.start && period?.end
+              ? `Activity from ${period.start} to ${period.end}`
+              : "Live snapshot from backend analytics."}
+          </p>
+        </div>
+        {!loading && (
+          <span
+            className="rounded-full border px-3 py-1 text-xs"
+            style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+          >
+            {fmtInt(totalCalls)} calls · {fmtInt(apptTotal)} appointments
+          </span>
+        )}
+      </div>
 
       <GlobalSearch />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Total Calls" value={loading ? "…" : c.total_calls} />
-        <StatCard
+      {/* KPI row */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          label="Total calls"
+          value={fmtInt(c.total_calls)}
+          sub={`${fmtInt(completedCalls)} completed`}
+          icon={<PhoneIcon />}
+          color={SERIES_COLORS[0]}
+          loading={loading}
+        />
+        <KpiCard
           label="Appointments"
-          value={loading ? "…" : a.total}
+          value={fmtInt(a.total)}
+          sub={`${fmtInt(a.from_ai)} booked by AI`}
+          icon={<CalendarIcon />}
+          color={SERIES_COLORS[1]}
+          loading={loading}
         />
-        <StatCard
+        <KpiCard
           label="Transfers"
-          value={loading ? "…" : c.transferred_calls}
+          value={fmtInt(c.transferred_calls)}
+          sub={totalCalls > 0 ? `${fmtPercent((transfers / totalCalls) * 100)} of calls` : undefined}
+          icon={<TransferIcon />}
+          color={SERIES_COLORS[3]}
+          loading={loading}
         />
-        <StatCard
+        <KpiCard
           label="Errors"
-          value={loading ? "…" : c.calls_with_errors}
+          value={fmtInt(c.calls_with_errors)}
+          sub={errors === 0 ? "All clear" : "Needs attention"}
+          icon={<AlertIcon />}
+          color={errors > 0 ? SERIES_COLORS[4] : SERIES_COLORS[2]}
+          loading={loading}
         />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-3">
-        <Card className="p-4">
-          <div className="font-semibold">Top Intents</div>
-          <div className="mt-3 space-y-2 text-sm">
-            {intents.slice(0, 8).map((row, idx) => (
-              <div key={idx} className="flex justify-between">
-                <span>{String(row.intent ?? "—")}</span>
-                <span style={{ color: "rgb(var(--muted))" }}>
-                  {String(row.count ?? "—")}
-                  {row.percentage != null ? ` (${row.percentage}%)` : ""}
-                </span>
+      {/* Secondary row: completion ring + avg duration */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <ChartCard title="Call completion" subtitle="Completed vs. total handled">
+          <div className="flex items-center justify-around py-1">
+            <StatRing
+              percent={completionRate}
+              caption="completed"
+              color={SERIES_COLORS[2]}
+            />
+            <div className="space-y-3 text-sm">
+              <div>
+                <div className="text-2xl font-semibold tabular-nums">{fmtInt(completedCalls)}</div>
+                <div style={{ color: "rgb(var(--muted))" }}>completed calls</div>
               </div>
-            ))}
-            {!loading && intents.length === 0 && (
-              <div style={{ color: "rgb(var(--muted))" }}>No intent data.</div>
-            )}
+              <div>
+                <div className="text-lg font-semibold tabular-nums">{fmtDuration(c.avg_duration)}</div>
+                <div style={{ color: "rgb(var(--muted))" }}>avg. duration</div>
+              </div>
+            </div>
           </div>
-        </Card>
+        </ChartCard>
 
-        <Card className="p-4">
-          <div className="font-semibold">Busy Hours</div>
-          <div className="mt-3 space-y-2 text-sm">
-            {hourly.slice(0, 8).map((row, idx) => (
-              <div key={idx} className="flex justify-between">
-                <span>{`${row.hour ?? "—"}:00`}</span>
-                <span style={{ color: "rgb(var(--muted))" }}>
-                  {String(row.call_count ?? "—")}
-                </span>
-              </div>
-            ))}
-            {!loading && hourly.length === 0 && (
-              <div style={{ color: "rgb(var(--muted))" }}>No hourly data.</div>
-            )}
-          </div>
-        </Card>
+        <ChartCard
+          title="Appointment status"
+          subtitle="Where the schedule stands"
+          className="lg:col-span-2"
+        >
+          {apptSegments.length ? (
+            <Donut
+              segments={apptSegments}
+              centerLabel={{ value: fmtInt(apptTotal), caption: "total" }}
+            />
+          ) : (
+            <div className="py-8 text-center text-sm" style={{ color: "rgb(var(--muted))" }}>
+              No appointments in this window.
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Charts row */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ChartCard
+          title="Top intents"
+          subtitle="What callers are asking for"
+          right={<CheckCircleIcon size={18} className="opacity-50" />}
+        >
+          <BarList items={intentItems} colorful emptyText="No intent data yet." />
+        </ChartCard>
+
+        <ChartCard
+          title="Busy hours"
+          subtitle="Call volume by hour of day"
+          right={<ClockIcon size={18} className="opacity-50" />}
+        >
+          <HourBars data={hourData} valueFormat={(v) => `${v} call${v === 1 ? "" : "s"}`} />
+        </ChartCard>
       </div>
     </div>
   );

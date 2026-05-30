@@ -2,6 +2,16 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-05-30 — Dashboard & analytics data visualization overhaul
+
+Rebuilt how the dashboard surfaces data: replaced bland text rows / empty tables with a dependency-free SVG/CSS chart layer (no new npm deps, so the Docker `next build` stays safe). Verified with frontend typecheck, lint, and `next build` (all clean).
+
+- **New viz layer** — `frontend/lib/format.ts` (number/duration/percent/hour formatters so raw Postgres aggregate strings render cleanly), `frontend/components/ui/charts.tsx` (`KpiCard`, `BarList`, `HourBars`, `Donut`, `StatRing`, `ChartCard`, theme-token aware), `frontend/components/ui/icons.tsx` (inline icon set).
+- **Dashboard redesigned** — `frontend/app/dashboard/page.tsx`. KPI cards with icons/sub-stats, call-completion ring + avg duration, appointment-status donut, top-intents bar list, and a 24-hour busy-hours bar chart with peak callout.
+- **Analytics page fixed + redesigned** — fixed three broken field bindings that showed empty/`—` data: `OverviewCards` read flat `total_calls/transfers/failures` instead of the backend's nested `calls.{…}`/`appointments.{…}`; `HourlyTable` read `calls/appointments/transfers` instead of `call_count`; `IntentsTable` read a never-returned `avg_duration_seconds`. Replaced tables with charts and added a **call-performance panel** (avg/p95 response time, STT confidence gauge, low-confidence rate, tool-usage bars) sourced from `GET /api/analytics/metrics`.
+  - `frontend/components/analytics/AnalyticsPageClient.tsx` · `overview/OverviewCards.tsx` · `intents/IntentsTable.tsx` · `hourly/HourlyTable.tsx` · `metrics/MetricsPanel.tsx` · `store/analytics.ts` · `lib/api/voiceAssistantApi.ts` · `lib/types.ts`
+- **Sessions stat cards** unified onto the new `KpiCard` for visual consistency — `frontend/components/sessions/stats/SessionsStatsCards.tsx`.
+
 ## 2026-05-27 — Fuzzy matching & call analytics
 
 - **Doctor name fuzzy matching** — `backend/src/services/conversation.ts`. Uses `pg_trgm` similarity to match misheard doctor names (e.g. Deepgram transcribes "Kamran" as "Cameron"). Falls back to fuzzy match (threshold 0.25) when exact LIKE fails. Also added fuzzy fallback for location names (threshold 0.2).

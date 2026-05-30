@@ -1,5 +1,6 @@
 // Path: components/sessions/stats/SessionsStatsCards.tsx
-import { Card } from "@/components/ui/Card";
+import { KpiCard, SERIES_COLORS } from "@/components/ui/charts";
+import { UsersIcon, BoltIcon, ClockIcon, CheckCircleIcon } from "@/components/ui/icons";
 import type { SessionStats } from "@/lib/types";
 
 function pickNum(o: Record<string, unknown>, key: string): number | null {
@@ -10,7 +11,7 @@ function pickNum(o: Record<string, unknown>, key: string): number | null {
 }
 
 function fmtNum(n: number | null): string {
-  return n == null ? "—" : String(n); // ✅ shows 0 correctly
+  return n == null ? "—" : n.toLocaleString();
 }
 
 function fmtDate(v: unknown): string {
@@ -23,51 +24,37 @@ function fmtDate(v: unknown): string {
 export function SessionsStatsCards({ stats }: { stats: SessionStats | null }) {
   if (!stats) {
     return (
-      <Card className="p-4">
-        <div className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          No session stats available.
-        </div>
-      </Card>
+      <div
+        className="rounded-2xl border p-4 text-sm"
+        style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+      >
+        No session stats available.
+      </div>
     );
   }
 
   const o = stats as unknown as Record<string, unknown>;
-
-  // ✅ Your backend keys:
   const total = pickNum(o, "total");
   const active = pickNum(o, "active");
   const inactive = pickNum(o, "inactive");
   const oldestInactive = o["oldestInactive"];
 
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      <Card className="p-4">
-        <div className="text-xs" style={{ color: "rgb(var(--muted))" }}>
-          Total sessions
-        </div>
-        <div className="text-2xl font-semibold">{fmtNum(total)}</div>
-      </Card>
-
-      <Card className="p-4">
-        <div className="text-xs" style={{ color: "rgb(var(--muted))" }}>
-          Active sessions
-        </div>
-        <div className="text-2xl font-semibold">{fmtNum(active)}</div>
-      </Card>
-
-      <Card className="p-4">
-        <div className="text-xs" style={{ color: "rgb(var(--muted))" }}>
-          Inactive sessions
-        </div>
-        <div className="text-2xl font-semibold">{fmtNum(inactive)}</div>
-      </Card>
-
-      <Card className="p-4">
-        <div className="text-xs" style={{ color: "rgb(var(--muted))" }}>
-          Oldest inactive
-        </div>
-        <div className="text-sm font-medium">{fmtDate(oldestInactive)}</div>
-      </Card>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <KpiCard label="Total sessions" value={fmtNum(total)} icon={<UsersIcon />} color={SERIES_COLORS[1]} />
+      <KpiCard label="Active sessions" value={fmtNum(active)} icon={<BoltIcon />} color={SERIES_COLORS[2]} />
+      <KpiCard
+        label="Inactive sessions"
+        value={fmtNum(inactive)}
+        icon={<CheckCircleIcon />}
+        color={SERIES_COLORS[0]}
+      />
+      <KpiCard
+        label="Oldest inactive"
+        value={<span className="text-base">{fmtDate(oldestInactive)}</span>}
+        icon={<ClockIcon />}
+        color={SERIES_COLORS[5]}
+      />
     </div>
   );
 }
