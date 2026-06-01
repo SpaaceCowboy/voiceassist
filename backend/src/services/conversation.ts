@@ -132,7 +132,9 @@ export async function generateGreeting(callSid: string): Promise<GreetingRespons
   
   // Update session state
   await redis.updateSessionState(callSid, { currentStep: 'listening' });
-  
+
+  logger.call(callSid, 'info', 'Greeting', { text: greeting });
+
   return { text: greeting, audio };
 }
 
@@ -291,6 +293,10 @@ export async function processInput(
 
     await callLogModel.appendToTranscript(callSid, 'user', userInput);
     await callLogModel.appendToTranscript(callSid, 'assistant', responseText);
+  }
+
+  if (responseText) {
+    logger.call(callSid, 'info', 'Assistant response', { text: responseText });
   }
 
   logger.call(callSid, 'info', 'Processing complete', {duration: `${duration}ms`})
