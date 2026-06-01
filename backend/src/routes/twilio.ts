@@ -207,10 +207,175 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let lastTranscript = '';
       let callEnded = false;
       let pendingFragment = '';
+      let pendingFragmentStartedAt = 0;
       let transcriptQueue: string[] = [];
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
       let debounceBuffer = '';
       const DEBOUNCE_MS = 1500;
+      const MAX_PENDING_FRAGMENT_CHARS = 240;
+      const MAX_PENDING_FRAGMENT_AGE_MS = 8000;
+      const MAX_DEBOUNCE_BUFFER_CHARS = 500;
+      const MAX_TRANSCRIPT_QUEUE = 4;
+      const MAX_DEEPGRAM_RESTARTS = 2;
+      let deepgramRestartAttempts = 0;
+
+      function appendPendingFragment(text: string): void {
+        const now = Date.now();
+        if (!pendingFragment || now - pendingFragmentStartedAt > MAX_PENDING_FRAGMENT_AGE_MS) {
+          pendingFragment = text;
+          pendingFragmentStartedAt = now;
+        } else {
+          pendingFragment += ` ${text}`;
+        }
+
+        if (pendingFragment.length > MAX_PENDING_FRAGMENT_CHARS) {
+          if (callSid) {
+            logger.call(callSid, 'warn', 'Dropping stale transcript fragment buffer', {
+              length: pendingFragment.length,
+            });
+          }
+          pendingFragment = '';
+          pendingFragmentStartedAt = 0;
+        }
+      }
+
+      function queueTranscript(text: string): void {
+        if (transcriptQueue.length >= MAX_TRANSCRIPT_QUEUE) {
+          const dropped = transcriptQueue.shift();
+          if (callSid) {
+            logger.call(callSid, 'warn', 'Transcript queue full, dropping oldest item', {
+              dropped,
+              queueSize: transcriptQueue.length,
+            });
+          }
+        }
+        transcriptQueue.push(text);
+      }
+
+      function createDeepgramSession(): DeepgramController {
+        return deepgramService.createLiveTranscription({
+          onTranscript: async (text: string, confidence: number) => {
+            if (!callSid || callEnded) return;
+
+            // Skip duplicate transcripts
+            if (text === lastTranscript) return;
+            lastTranscript = text;
+
+            logger.call(callSid, 'info', 'Transcript', { text, confidence });
+
+            await redis.appendConfidenceScore(callSid, confidence);
+
+            // Buffer low-confidence fragments and merge with next transcript
+            const MIN_CONFIDENCE = 0.6;
+            if (confidence < MIN_CONFIDENCE) {
+              appendPendingFragment(text);
+              logger.call(callSid, 'warn', 'Low confidence transcript buffered', { text, confidence, threshold: MIN_CONFIDENCE });
+              return;
+            }
+
+            const wordCount = text.trim().split(/\s+/).length;
+            if (isSpeaking && wordCount <= 2 && text.trim().length < 8) {
+              logger.call(callSid, 'debug', 'Ignoring short transcript during playback', { text, wordCount });
+              return;
+            }
+
+            const looksComplete = /[.!?]$/.test(text.trim()) || wordCount >= 4;
+            if (!looksComplete) {
+              appendPendingFragment(text);
+              logger.call(callSid, 'info', 'Short incomplete utterance buffered', { text, wordCount });
+              return;
+            }
+
+            let fullText = text;
+            if (pendingFragment) {
+              fullText = pendingFragment + ' ' + text;
+              logger.call(callSid, 'debug', 'Merged buffered fragment', { fragment: pendingFragment, merged: fullText });
+              pendingFragment = '';
+              pendingFragmentStartedAt = 0;
+            }
+
+            if (isProcessing) {
+              if (debounceTimer) {
+                clearTimeout(debounceTimer);
+                fullText = debounceBuffer + ' ' + fullText;
+                debounceBuffer = '';
+                debounceTimer = null;
+              }
+              if (transcriptQueue.length > 0) {
+                transcriptQueue[transcriptQueue.length - 1] += ' ' + fullText;
+                logger.call(callSid, 'info', 'Transcript merged into queue', { input: transcriptQueue[transcriptQueue.length - 1], queueSize: transcriptQueue.length });
+              } else {
+                queueTranscript(fullText);
+                logger.call(callSid, 'info', 'Transcript queued (processing busy)', { input: fullText, queueSize: transcriptQueue.length });
+              }
+            } else {
+              debounceBuffer += (debounceBuffer ? ' ' : '') + fullText;
+              if (debounceBuffer.length > MAX_DEBOUNCE_BUFFER_CHARS) {
+                logger.call(callSid, 'warn', 'Debounce buffer exceeded max size, flushing', {
+                  length: debounceBuffer.length,
+                });
+                queueTranscript(debounceBuffer);
+                debounceBuffer = '';
+                if (debounceTimer) {
+                  clearTimeout(debounceTimer);
+                  debounceTimer = null;
+                }
+                drainQueue();
+                return;
+              }
+              if (debounceTimer) clearTimeout(debounceTimer);
+              debounceTimer = setTimeout(() => {
+                const merged = debounceBuffer;
+                debounceBuffer = '';
+                debounceTimer = null;
+                if (merged && callSid && !callEnded) {
+                  logger.call(callSid!, 'debug', 'Debounce fired', { input: merged });
+                  queueTranscript(merged);
+                  drainQueue();
+                }
+              }, DEBOUNCE_MS);
+            }
+          },
+          onInterim: (text: string) => {
+            const words = text.trim().split(/\s+/);
+            if (isSpeaking && streamSid && words.length >= 2 && text.trim().length >= 5) {
+              ws.send(JSON.stringify({ event: 'clear', streamSid }));
+              isSpeaking = false;
+              if (callSid) logger.call(callSid, 'debug', 'Barge-in (interim): cleared audio', { text });
+            }
+          },
+          onError: async (error: Error) => {
+            logger.error('Deepgram error', error);
+            if (!callSid || callEnded) return;
+
+            if (deepgramRestartAttempts < MAX_DEEPGRAM_RESTARTS) {
+              deepgramRestartAttempts += 1;
+              logger.call(callSid, 'warn', 'Restarting Deepgram live transcription', {
+                attempt: deepgramRestartAttempts,
+              });
+              setTimeout(() => {
+                if (!callEnded) {
+                  deepgramController = createDeepgramSession();
+                }
+              }, 300 * deepgramRestartAttempts);
+              return;
+            }
+
+            logger.call(callSid, 'error', 'Deepgram live transcription unavailable after retries');
+            if (streamSid) {
+              await streamTTSResponse(
+                ws,
+                streamSid,
+                "I'm having trouble hearing you clearly. Let me transfer you to our staff.",
+                callSid,
+                () => !callEnded
+              );
+              await transferCall(callSid);
+              callEnded = true;
+            }
+          },
+        });
+      }
 
       // Process a single transcript through LLM + TTS
       async function handleTranscript(input: string): Promise<void> {
@@ -302,109 +467,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
               logger.info('Media stream started', { callSid, streamSid });
 
               // Initialize Deepgram for transcription
-              deepgramController = deepgramService.createLiveTranscription({
-                onTranscript: async (text: string, confidence: number) => {
-                  if (!callSid || callEnded) return;
-
-                  // Skip duplicate transcripts
-                  if (text === lastTranscript) return;
-                  lastTranscript = text;
-
-                  logger.call(callSid, 'info', 'Transcript', { text, confidence });
-
-                  // Record confidence for analytics
-                  const sid = callSid;
-                  redis.getSession(sid).then(s => {
-                    if (s?.metrics) {
-                      s.metrics.confidenceScores.push(confidence);
-                      redis.updateSession(sid, { metrics: s.metrics });
-                    }
-                  }).catch(() => {});
-
-                  // Buffer low-confidence fragments and merge with next transcript
-                  const MIN_CONFIDENCE = 0.6;
-                  if (confidence < MIN_CONFIDENCE) {
-                    pendingFragment += (pendingFragment ? ' ' : '') + text;
-                    logger.call(callSid, 'warn', 'Low confidence transcript buffered', { text, confidence, threshold: MIN_CONFIDENCE });
-                    return;
-                  }
-
-                  // While the assistant is speaking, ignore very short transcripts
-                  // (single filler words like "the", "uh", breaths) — only real
-                  // sentences should interrupt and get processed.
-                  const wordCount = text.trim().split(/\s+/).length;
-                  if (isSpeaking && wordCount <= 2 && text.trim().length < 8) {
-                    logger.call(callSid, 'debug', 'Ignoring short transcript during playback', { text, wordCount });
-                    return;
-                  }
-
-                  // Buffer short incomplete utterances (e.g. "Wanna have", "I just")
-                  // even with high confidence — they're sentence fragments, not
-                  // actionable input. Wait for the rest to arrive.
-                  const looksComplete = /[.!?]$/.test(text.trim()) || wordCount >= 4;
-                  if (!looksComplete) {
-                    pendingFragment += (pendingFragment ? ' ' : '') + text;
-                    logger.call(callSid, 'info', 'Short incomplete utterance buffered', { text, wordCount });
-                    return;
-                  }
-
-                  // Prepend any buffered fragments
-                  let fullText = text;
-                  if (pendingFragment) {
-                    fullText = pendingFragment + ' ' + text;
-                    logger.call(callSid, 'debug', 'Merged buffered fragment', { fragment: pendingFragment, merged: fullText });
-                    pendingFragment = '';
-                  }
-
-                  // Debounce: accumulate transcripts and wait for a pause so
-                  // split utterances ("On Friday," + "May 9.") merge into one LLM call.
-                  // If already processing, skip debounce and queue immediately to
-                  // avoid adding delay on top of existing LLM latency.
-                  if (isProcessing) {
-                    if (debounceTimer) {
-                      clearTimeout(debounceTimer);
-                      fullText = debounceBuffer + ' ' + fullText;
-                      debounceBuffer = '';
-                      debounceTimer = null;
-                    }
-                    // Merge with last queued item instead of stacking separate entries
-                    // so "What is your services" + "on neurospine?" become one LLM call
-                    if (transcriptQueue.length > 0) {
-                      transcriptQueue[transcriptQueue.length - 1] += ' ' + fullText;
-                      logger.call(callSid, 'info', 'Transcript merged into queue', { input: transcriptQueue[transcriptQueue.length - 1], queueSize: transcriptQueue.length });
-                    } else {
-                      transcriptQueue.push(fullText);
-                      logger.call(callSid, 'info', 'Transcript queued (processing busy)', { input: fullText, queueSize: transcriptQueue.length });
-                    }
-                  } else {
-                    debounceBuffer += (debounceBuffer ? ' ' : '') + fullText;
-                    if (debounceTimer) clearTimeout(debounceTimer);
-                    debounceTimer = setTimeout(() => {
-                      const merged = debounceBuffer;
-                      debounceBuffer = '';
-                      debounceTimer = null;
-                      if (merged && callSid && !callEnded) {
-                        logger.call(callSid!, 'debug', 'Debounce fired', { input: merged });
-                        transcriptQueue.push(merged);
-                        drainQueue();
-                      }
-                    }, DEBOUNCE_MS);
-                  }
-                },
-                onInterim: (text: string) => {
-                  // Barge-in on interim speech — only if it looks like real words
-                  // (at least 2 words and 5 chars to avoid breath/noise triggers)
-                  const words = text.trim().split(/\s+/);
-                  if (isSpeaking && streamSid && words.length >= 2 && text.trim().length >= 5) {
-                    ws.send(JSON.stringify({ event: 'clear', streamSid }));
-                    isSpeaking = false;
-                    if (callSid) logger.call(callSid, 'debug', 'Barge-in (interim): cleared audio', { text });
-                  }
-                },
-                onError: (error: Error) => {
-                  logger.error('Deepgram error', error);
-                },
-              });
+              deepgramController = createDeepgramSession();
               
               // Generate and send greeting
               if (callSid) {
@@ -437,6 +500,8 @@ export function setupMediaStreamWebSocket(server: Server): void {
               callEnded = true;
               if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
               debounceBuffer = '';
+              pendingFragment = '';
+              pendingFragmentStartedAt = 0;
               logger.info('Media stream stopped', { callSid });
               break;
           }
@@ -535,12 +600,7 @@ async function streamTTSResponse(
   logger.call(callSid, 'info', 'Streaming TTS complete', { duration: `${duration}ms`, chunks: sentences.length });
 
   // Track TTS chunks in session metrics
-  redis.getSession(callSid).then(s => {
-    if (s?.metrics) {
-      s.metrics.ttsChunks += sentences.length;
-      redis.updateSession(callSid, { metrics: s.metrics });
-    }
-  }).catch(() => {});
+  redis.incrementTtsChunks(callSid, sentences.length).catch(() => {});
 }
 
 //hang up a call

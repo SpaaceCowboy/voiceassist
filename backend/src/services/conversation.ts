@@ -1,11 +1,13 @@
 //manages the flow of , function execution, and cordinates between all other serviices.
 
 import { patientModel, callLogModel, faqModel, appointmentModel, sessionModel } from '../models';
-import openaiService from './openai';
+import llmService from './llm';
+import analysisService from './openai';
 import ttsService from './tts';
 import redis from '../config/redis';
 import db from '../config/database'
-import { getCurrentDate, formatTimeForDisplay, validateAppointment,  } from '../utils/helpers';
+import { getCurrentDate, formatTimeForDisplay, validateAppointment, generateConfirmationCode } from '../utils/helpers';
+import { parseToolArgs } from '../functions/tools';
 import logger from '../utils/logger';
 import type {
   Session,
@@ -130,7 +132,9 @@ export async function generateGreeting(callSid: string): Promise<GreetingRespons
   
   // Update session state
   await redis.updateSessionState(callSid, { currentStep: 'listening' });
-  
+
+  logger.call(callSid, 'info', 'Greeting', { text: greeting });
+
   return { text: greeting, audio };
 }
 
@@ -162,10 +166,11 @@ export async function processInput(
   }
 
   // build context for OpenAI
-  const context = await buildToolContext(session);
+  const context = await buildToolContext(updatedSession);
+  let workingHistory: Message[] = [...updatedSession.messageHistory];
 
   // call openai
-  const response = await openaiService.chat(updatedSession.messageHistory, context);
+  const response = await llmService.chat(workingHistory, context);
 
   let responseText = response.content || '';
   let shouldEnd = false;
@@ -177,6 +182,7 @@ export async function processInput(
   let currentResponse = response;
   let lastToolKey = '';
   const toolCallCounts = new Map<string, number>();
+  let llmCallCount = 1;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS && currentResponse.functionCall; round++) {
     const { name, arguments: args, id } = currentResponse.functionCall;
@@ -200,10 +206,50 @@ export async function processInput(
 
     logger.call(callSid, 'info', 'Function call', { name, args });
 
+    await redis.addMessage(callSid, {
+      role: 'assistant',
+      content: currentResponse.content || '',
+      timestamp: new Date(),
+      tool_calls: [
+        {
+          id,
+          type: 'function',
+          function: {
+            name,
+            arguments: JSON.stringify(args),
+          },
+        },
+      ],
+    });
+    workingHistory.push({
+      role: 'assistant',
+      content: currentResponse.content || '',
+      timestamp: new Date(),
+      tool_calls: [
+        {
+          id,
+          type: 'function',
+          function: {
+            name,
+            arguments: JSON.stringify(args),
+          },
+        },
+      ],
+    });
+
     const toolStart = Date.now();
     const result = await executeFunctionCall(callSid, name, args);
     const toolDuration = Date.now() - toolStart;
-    updatedSession.metrics.toolCalls.push({ name, durationMs: toolDuration });
+    await redis.appendToolCallMetric(callSid, { name, durationMs: toolDuration });
+
+    const toolMessage: Message = {
+      role: 'tool',
+      content: JSON.stringify(result),
+      timestamp: new Date(),
+      tool_call_id: id,
+    };
+    await redis.addMessage(callSid, toolMessage);
+    workingHistory.push(toolMessage);
 
     shouldEnd = shouldEnd || result.shouldEnd || false;
     shouldTransfer = shouldTransfer || result.shouldTransfer || false;
@@ -219,8 +265,8 @@ export async function processInput(
       break;
     }
 
-    const continueResponse = await openaiService.continueAfterFunctionCall(
-      updatedSession.messageHistory,
+    const continueResponse = await llmService.continueAfterFunctionCall(
+      workingHistory,
       name,
       result,
       id,
@@ -229,13 +275,13 @@ export async function processInput(
 
     responseText = continueResponse.content || '';
     currentResponse = continueResponse;
+    llmCallCount += 1;
   }
 
   // Track metrics
   const duration = Date.now() - startTime;
-  updatedSession.metrics.responseTimes.push(duration);
-  updatedSession.metrics.llmCalls += 1 + updatedSession.metrics.toolCalls.length;
-  await redis.updateSession(callSid, { metrics: updatedSession.metrics });
+  await redis.appendResponseTime(callSid, duration);
+  await redis.incrementLlmCalls(callSid, llmCallCount);
 
   // Persist response (TTS is now handled by the route layer for streaming)
   if (responseText) {
@@ -247,6 +293,10 @@ export async function processInput(
 
     await callLogModel.appendToTranscript(callSid, 'user', userInput);
     await callLogModel.appendToTranscript(callSid, 'assistant', responseText);
+  }
+
+  if (responseText) {
+    logger.call(callSid, 'info', 'Assistant response', { text: responseText });
   }
 
   logger.call(callSid, 'info', 'Processing complete', {duration: `${duration}ms`})
@@ -319,33 +369,41 @@ async function executeFunctionCall(
     return {success: false, error: 'Session not found'};
   }
 
+  const parsedArgs = parseToolArgs(name, args);
+  if (!parsedArgs.valid) {
+    logger.call(callSid, 'warn', 'Invalid function arguments', { name, error: parsedArgs.error });
+    return { success: false, error: parsedArgs.error };
+  }
+
+  const safeArgs = parsedArgs.data;
+
   switch (name) {
     case 'check_availability':
-      return handleCheckAvailability(args);
+      return handleCheckAvailability(safeArgs);
 
     case 'book_appointment':
-      return handleBookAppointment(callSid, session, args);
+      return handleBookAppointment(callSid, session, safeArgs);
 
     case 'reschedule_appointment':
-      return handleRescheduleAppointment(args);
+      return handleRescheduleAppointment(session, safeArgs);
 
     case 'cancel_appointment':
-      return handleCancelAppointment(args);
+      return handleCancelAppointment(session, safeArgs);
 
     case 'get_patient_appointments':
       return handleGetAppointments(session);
 
     case 'update_patient_info':
-      return handleUpdatePatientInfo(session, args);
+      return handleUpdatePatientInfo(session, safeArgs);
 
     case 'get_department_info':
-      return handleGetDepartmentInfo(args);
+      return handleGetDepartmentInfo(safeArgs);
 
     case 'answer_faq':
-      return handleFaq(args);
+      return handleFaq(safeArgs);
 
     case 'transfer_to_staff':
-      return handleTransfer(callSid, args);
+      return handleTransfer(callSid, safeArgs);
 
     case 'end_call':
       return handleEndCall(callSid, session);
@@ -405,6 +463,18 @@ async function handleBookAppointment(
 
   const date = String(args.date);
   const time = String(args.time);
+  const validation = validateAppointment(date, time);
+  if (!validation.valid) {
+    return { success: false, error: validation.error };
+  }
+
+  if (!session.patient.full_name) {
+    return {
+      success: false,
+      error: 'Patient full name is required before booking an appointment',
+    };
+  }
+  const patient = session.patient;
 
   let doctorId: number | undefined;
   let doctorName: string | undefined;
@@ -439,27 +509,101 @@ async function handleBookAppointment(
   }
 
   try {
-    const appointment = await appointmentModel.create({
-      patientId: session.patient.id,
-      doctorId,
-      departmentId,
-      locationId,
-      date,
-      time,
-      appointmentType: (args.appointment_type as AppointmentType) || 'consultation',
-      reasonForVisit: args.reason_for_visit ? String(args.reason_for_visit) : undefined,
-      specialInstructions: args.special_instructions
-        ? String(args.special_instructions)
-        : undefined,
-      isNewPatient: args.is_new_patient === true || args.is_new_patient === 'true',
-      source: 'phone_ai',
+    const appointment = await db.transaction<Appointment>(async (client) => {
+      const lockKey = [
+        date,
+        time,
+        doctorId ?? 'any_doctor',
+        locationId ?? 'any_location',
+      ].join(':');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+
+      const blockedParams = doctorId ? [date, doctorId, time] : [date, time];
+      const blockedQuery = doctorId
+        ? `SELECT reason FROM blocked_times
+           WHERE blocked_date = $1
+             AND (doctor_id = $2 OR doctor_id IS NULL)
+             AND (start_time IS NULL OR $3::time BETWEEN start_time AND end_time)
+           LIMIT 1`
+        : `SELECT reason FROM blocked_times
+           WHERE blocked_date = $1
+             AND doctor_id IS NULL
+             AND (start_time IS NULL OR $2::time BETWEEN start_time AND end_time)
+           LIMIT 1`;
+      const blocked = await client.query<{ reason: string | null }>(blockedQuery, blockedParams);
+      if (blocked.rows.length > 0) {
+        throw new Error(blocked.rows[0].reason || 'This date/time is not available');
+      }
+
+      let countQuery = `
+        SELECT COUNT(*) as count FROM appointments
+        WHERE appointment_date = $1
+          AND appointment_time BETWEEN ($2::time - interval '15 minutes')
+                                    AND ($2::time + interval '15 minutes')
+          AND status NOT IN ('cancelled', 'no_show', 'rescheduled')`;
+      const countParams: unknown[] = [date, time];
+      if (doctorId) {
+        countQuery += ` AND doctor_id = $${countParams.length + 1}`;
+        countParams.push(doctorId);
+      }
+      if (locationId) {
+        countQuery += ` AND location_id = $${countParams.length + 1}`;
+        countParams.push(locationId);
+      }
+      const countResult = await client.query<{ count: string }>(countQuery, countParams);
+      const currentBookings = parseInt(countResult.rows[0]?.count || '0');
+      const maxPerSlot = parseInt(process.env.MAX_APPOINTMENTS_PER_SLOT || '3');
+      if (currentBookings >= maxPerSlot) {
+        throw new Error('This time slot is fully booked');
+      }
+
+      const confirmationCode = generateConfirmationCode();
+      const result = await client.query<Appointment>(
+        `INSERT INTO appointments (
+           patient_id, doctor_id, department_id, location_id,
+           appointment_date, appointment_time, duration_minutes,
+           appointment_type, reason_for_visit, special_instructions,
+           is_new_patient, referral_required, referral_source,
+           source, confirmation_code
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         RETURNING *`,
+        [
+          patient.id,
+          doctorId || null,
+          departmentId || null,
+          locationId || null,
+          date,
+          time,
+          30,
+          (args.appointment_type as AppointmentType) || 'consultation',
+          args.reason_for_visit ? String(args.reason_for_visit) : null,
+          args.special_instructions ? String(args.special_instructions) : null,
+          args.is_new_patient === true || args.is_new_patient === 'true',
+          false,
+          null,
+          'phone_ai',
+          confirmationCode,
+        ]
+      );
+
+      await client.query(
+        `UPDATE patients
+         SET total_appointments = total_appointments + 1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [patient.id]
+      );
+
+      await client.query(
+        `UPDATE call_logs SET
+           appointment_id = $2,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE call_sid = $1`,
+        [callSid, result.rows[0].id]
+      );
+
+      return result.rows[0];
     });
-
-    // Update patient stats
-    await patientModel.incrementAppointmentCount(session.patient.id);
-
-    // Link appointment to call
-    await callLogModel.linkAppointment(callSid, appointment.id);
 
     return {
       success: true,
@@ -476,13 +620,21 @@ async function handleBookAppointment(
     };
   } catch (error) {
     logger.error('Failed to book appointment', error);
-    return { success: false, error: 'Failed to book appointment' };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to book appointment',
+    };
   }
 }
 
 async function handleRescheduleAppointment(
+  session: Session,
   args: Record<string, unknown>
 ): Promise<FunctionExecutionResult> {
+  if (!session.patient) {
+    return { success: false, error: 'Patient not found' };
+  }
+
   const appointmentId = parseInt(String(args.appointment_id));
 
   // Try to find by confirmation code if not a number
@@ -497,9 +649,25 @@ async function handleRescheduleAppointment(
     return { success: false, error: 'Appointment not found' };
   }
 
+  if (appt.patient_id !== session.patient.id) {
+    return {
+      success: false,
+      error: 'Appointment does not belong to this caller. Please transfer to staff.',
+    };
+  }
+
   const updates: Record<string, unknown> = {};
   if (args.new_date) updates.date = String(args.new_date);
   if (args.new_time) updates.time = String(args.new_time);
+
+  if (updates.date || updates.time) {
+    const newDate = String(updates.date || appt.appointment_date);
+    const newTime = String(updates.time || appt.appointment_time).slice(0, 5);
+    const validation = validateAppointment(newDate, newTime);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+  }
 
   if (args.new_doctor_name) {
     const doctor = await findDoctorByName(String(args.new_doctor_name));
@@ -534,8 +702,13 @@ async function handleRescheduleAppointment(
 }
 
 async function handleCancelAppointment(
+  session: Session,
   args: Record<string, unknown>
 ): Promise<FunctionExecutionResult> {
+  if (!session.patient) {
+    return { success: false, error: 'Patient not found' };
+  }
+
   const appointmentId = parseInt(String(args.appointment_id));
   const reason = args.reason ? String(args.reason) : undefined;
 
@@ -549,6 +722,13 @@ async function handleCancelAppointment(
 
   if (!appt) {
     return { success: false, error: 'Appointment not found' };
+  }
+
+  if (appt.patient_id !== session.patient.id) {
+    return {
+      success: false,
+      error: 'Appointment does not belong to this caller. Please transfer to staff.',
+    };
   }
 
   try {
@@ -776,9 +956,9 @@ export async function handleCallEnded(
 
     try {
       const [summaryResult, intentResult, sentimentResult] = await Promise.all([
-        openaiService.generateCallSummary(transcript),
-        openaiService.detectIntent(transcript),
-        openaiService.analyzeSentiment(transcript),
+        analysisService.generateCallSummary(transcript),
+        analysisService.detectIntent(transcript),
+        analysisService.analyzeSentiment(transcript),
       ]);
       summary = summaryResult;
       intent = intentResult;
