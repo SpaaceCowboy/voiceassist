@@ -1,4 +1,5 @@
 // this file defines what actions the ai can take during a conversation
+import { z } from 'zod';
 import type { ToolDefinition, ToolContext } from "../../types/index";
 
 // tool definitions
@@ -420,7 +421,112 @@ export function validateToolArgs(
     }
   }
 
+  const parsed = parseToolArgs(toolName, args);
+  if (!parsed.valid) {
+    return { valid: false, error: parsed.error };
+  }
+
   return { valid: true };
+}
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
+const timeSchema = z.string().regex(/^\d{2}:\d{2}$/, 'Expected HH:MM');
+const optionalText = z.string().trim().min(1).max(500).optional();
+const appointmentTypeSchema = z.enum([
+  'consultation',
+  'follow_up',
+  'procedure',
+  'imaging',
+  'urgent_care',
+  'pre_surgical',
+  'post_surgical',
+  'pain_management',
+  'therapy',
+]);
+
+const toolArgSchemas: Record<string, z.ZodType<Record<string, unknown>>> = {
+  check_availability: z.object({
+    date: dateSchema,
+    time: timeSchema,
+    doctor_name: optionalText,
+    department: optionalText,
+    location: optionalText,
+  }).strict(),
+  book_appointment: z.object({
+    date: dateSchema,
+    time: timeSchema,
+    doctor_name: optionalText,
+    department: optionalText,
+    location: optionalText,
+    appointment_type: appointmentTypeSchema.optional(),
+    reason_for_visit: optionalText,
+    special_instructions: optionalText,
+    is_new_patient: z.union([z.boolean(), z.enum(['true', 'false'])]).optional(),
+  }).strict(),
+  reschedule_appointment: z.object({
+    appointment_id: z.union([z.string().trim().min(1).max(32), z.number().int().positive()]),
+    new_date: dateSchema.optional(),
+    new_time: timeSchema.optional(),
+    new_doctor_name: optionalText,
+    new_location: optionalText,
+    reason: optionalText,
+  }).strict(),
+  cancel_appointment: z.object({
+    appointment_id: z.union([z.string().trim().min(1).max(32), z.number().int().positive()]),
+    reason: optionalText,
+  }).strict(),
+  get_patient_appointments: z.object({}).strict(),
+  update_patient_info: z.object({
+    name: z.string().trim().min(2).max(120).optional(),
+    insurance_provider: optionalText,
+    insurance_id: z.string().trim().min(1).max(80).optional(),
+    email: z.string().trim().email().max(254).optional(),
+  }).strict(),
+  get_department_info: z.object({
+    department: z.string().trim().min(1).max(120),
+  }).strict(),
+  answer_faq: z.object({
+    question: z.string().trim().min(1).max(500),
+  }).strict(),
+  transfer_to_staff: z.object({
+    reason: z.enum([
+      'patient_request',
+      'complex_request',
+      'medical_question',
+      'insurance_verification',
+      'complaint',
+      'cannot_help',
+      'emergency',
+    ]),
+    notes: optionalText,
+  }).strict(),
+  end_call: z.object({
+    reason: z.enum([
+      'task_completed',
+      'patient_goodbye',
+      'no_response',
+      'patient_request',
+    ]),
+  }).strict(),
+};
+
+export function parseToolArgs(
+  toolName: string,
+  args: Record<string, unknown>
+): { valid: true; data: Record<string, unknown> } | { valid: false; error: string } {
+  const schema = toolArgSchemas[toolName];
+  if (!schema) {
+    return { valid: false, error: `Unknown tool: ${toolName}` };
+  }
+
+  const parsed = schema.safeParse(args);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const path = firstIssue.path.length ? `${firstIssue.path.join('.')}: ` : '';
+    return { valid: false, error: `${path}${firstIssue.message}` };
+  }
+
+  return { valid: true, data: parsed.data };
 }
 
 export default {
@@ -429,4 +535,5 @@ export default {
   getToolByName,
   getSystemPrompt,
   validateToolArgs,
+  parseToolArgs,
 };

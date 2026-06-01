@@ -12,6 +12,11 @@ const m = vi.hoisted(() => ({
     addMessage: vi.fn(),
     updateSession: vi.fn(),
     updateSessionState: vi.fn(),
+    appendResponseTime: vi.fn(),
+    appendToolCallMetric: vi.fn(),
+    appendConfidenceScore: vi.fn(),
+    incrementLlmCalls: vi.fn(),
+    incrementTtsChunks: vi.fn(),
     deleteSession: vi.fn(),
   },
   db: { query: vi.fn() },
@@ -53,6 +58,12 @@ vi.mock('../models', () => ({
   faqModel: m.faqModel,
 }));
 
+vi.mock('./llm', () => ({
+  default: {
+    chat: m.openaiService.chat,
+    continueAfterFunctionCall: m.openaiService.continueAfterFunctionCall,
+  },
+}));
 vi.mock('./openai', () => ({ default: m.openaiService }));
 vi.mock('./tts', () => ({ default: m.ttsService }));
 
@@ -261,6 +272,8 @@ describe('processInput', () => {
     // Transcript persisted (both sides).
     expect(m.callLogModel.appendToTranscript).toHaveBeenCalledWith('CA123', 'user', 'I need an appointment');
     expect(m.callLogModel.appendToTranscript).toHaveBeenCalledWith('CA123', 'assistant', 'Sure, I can help.');
+    expect(m.redis.appendResponseTime).toHaveBeenCalledWith('CA123', expect.any(Number));
+    expect(m.redis.incrementLlmCalls).toHaveBeenCalledWith('CA123', 1);
     // continueAfterFunctionCall never invoked on the no-function path.
     expect(m.openaiService.continueAfterFunctionCall).not.toHaveBeenCalled();
   });
@@ -287,6 +300,21 @@ describe('processInput', () => {
     expect(result.transferReason).toBe('complex_request');
     expect(result.shouldEnd).toBe(false);
     expect(result.text).toBe('Transferring you now. Please hold.');
+    expect(m.redis.addMessage).toHaveBeenCalledWith(
+      'CA123',
+      expect.objectContaining({
+        role: 'assistant',
+        tool_calls: expect.arrayContaining([
+          expect.objectContaining({
+            function: expect.objectContaining({ name: 'transfer_to_staff' }),
+          }),
+        ]),
+      }),
+    );
+    expect(m.redis.addMessage).toHaveBeenCalledWith(
+      'CA123',
+      expect.objectContaining({ role: 'tool', tool_call_id: 'tool-1' }),
+    );
     expect(m.openaiService.continueAfterFunctionCall).not.toHaveBeenCalled();
   });
 

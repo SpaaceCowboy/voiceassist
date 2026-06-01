@@ -134,9 +134,9 @@ export async function chat(
 
 export async function continueAfterFunctionCall(
   messages: Message[],
-  functionName: string,
-  functionResult: unknown,
-  toolCallId: string,
+  _functionName: string,
+  _functionResult: unknown,
+  _toolCallId: string,
   context: ToolContext
 ): Promise<OpenAIChatResponse> {
   const startTime = Date.now();
@@ -145,29 +145,6 @@ export async function continueAfterFunctionCall(
     const systemPrompt = getSystemPrompt(context);
     const claudeMessages = convertMessagesForClaude(messages);
     const claudeTools = convertToolsForClaude(getTools());
-
-    claudeMessages.push({
-      role: 'assistant',
-      content: [
-        {
-          type: 'tool_use',
-          id: toolCallId,
-          name: functionName,
-          input: {},
-        },
-      ],
-    });
-
-    claudeMessages.push({
-      role: 'user',
-      content: [
-        {
-          type: 'tool_result',
-          tool_use_id: toolCallId,
-          content: JSON.stringify(functionResult),
-        },
-      ],
-    });
 
     const response = await anthropic.messages.create({
       model: MODEL,

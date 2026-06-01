@@ -2,6 +2,19 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-01 — Assistant backend hardening
+
+- **Atomic AI appointment booking** — `backend/src/services/conversation.ts`. `book_appointment` now validates appointment date/time, requires a known patient name, takes a per-slot Postgres advisory transaction lock, rechecks blocked times/capacity, inserts the appointment, increments patient stats, and links the call log in one transaction.
+- **Tool call history persistence** — `backend/src/services/conversation.ts`, `backend/src/services/llm.ts`. Assistant tool-use messages and tool results are now stored in Redis session history and passed back to Claude on continuation turns, so later turns retain the exact checked/booked context.
+- **Schema-validated assistant tools** — `backend/src/functions/tools.ts`. Added Zod validation for every tool's arguments, including date/time formats, enums, email format, string bounds, unknown-key rejection, and typed boolean handling.
+- **Caller ownership checks** — `backend/src/services/conversation.ts`. Reschedule and cancel tool handlers now require the target appointment to belong to the current caller's patient record before mutating it.
+- **Voice stream resilience** — `backend/src/routes/twilio.ts`. Added bounded STT fragment/debounce buffers, transcript queue caps, Deepgram live transcription restart attempts, and a staff-transfer fallback when STT remains unavailable.
+- **Safer Redis session metrics** — `backend/src/config/redis.ts`, `backend/src/routes/twilio.ts`, `backend/src/services/conversation.ts`. Session updates now use Redis WATCH/MULTI retry logic, with dedicated append/increment helpers for response times, tool calls, STT confidence, LLM calls, and TTS chunks to reduce lost updates from concurrent async paths.
+- **Provider clarity** — `backend/src/services/conversation.ts`, `backend/src/server.ts`. Conversation turns now import `llmService` directly while call summaries/intent/sentiment use `analysisService`; startup also requires `ANTHROPIC_API_KEY` because Claude is the active conversational LLM.
+- **Tests updated** — `backend/src/functions/tools.test.ts`, `backend/src/services/conversation.test.ts`. Adjusted coverage for strict tool argument validation, persisted tool messages, and atomic metric helpers.
+
+Verified: `cd backend && npm run typecheck`; `cd backend && npm test` (255 tests).
+
 ## 2026-05-27 — Fuzzy matching & call analytics
 
 - **Doctor name fuzzy matching** — `backend/src/services/conversation.ts`. Uses `pg_trgm` similarity to match misheard doctor names (e.g. Deepgram transcribes "Kamran" as "Cameron"). Falls back to fuzzy match (threshold 0.25) when exact LIKE fails. Also added fuzzy fallback for location names (threshold 0.2).

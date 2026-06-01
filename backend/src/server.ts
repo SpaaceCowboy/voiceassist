@@ -45,6 +45,7 @@ const requiredEnvVars = [
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'DEEPGRAM_API_KEY',
+  'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
   'JWT_SECRET',
 ];

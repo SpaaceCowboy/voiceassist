@@ -37,6 +37,46 @@ const client = new Redis(parseRedisUrl(redisUrl));
 const SESSION_PREFIX = 'session:';
 const SESSION_TTL = 3600; // 1 hour
 
+async function updateSessionAtomically(
+  callSid: string,
+  mutate: (session: Session) => Session
+): Promise<Session | null> {
+  const key = `${SESSION_PREFIX}${callSid}`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await client.watch(key);
+    const data = await client.get(key);
+
+    if (!data) {
+      await client.unwatch();
+      logger.warn('Cannot update non-existent session', { callSid });
+      return null;
+    }
+
+    let session: Session;
+    try {
+      session = JSON.parse(data) as Session;
+    } catch (error) {
+      await client.unwatch();
+      logger.error('Failed to parse session', { callSid, error });
+      return null;
+    }
+
+    const updatedSession = mutate(session);
+    const result = await client
+      .multi()
+      .setex(key, SESSION_TTL, JSON.stringify(updatedSession))
+      .exec();
+
+    if (result) {
+      return updatedSession;
+    }
+  }
+
+  logger.warn('Session update conflict retries exhausted', { callSid });
+  return getSession(callSid);
+}
+
 // Session functions
 export async function setSession(callSid: string, session: Session): Promise<void> {
   const key = `${SESSION_PREFIX}${callSid}`;
@@ -64,76 +104,96 @@ export async function updateSession(
   callSid: string,
   updates: Partial<Session>
 ): Promise<Session | null> {  
-  const session = await getSession(callSid);
-
-  if (!session) {
-    logger.warn('Cannot update non-existent session', { callSid });
-    return null;
-  }
-
-  const updatedSession: Session = {
+  return updateSessionAtomically(callSid, (session) => ({
     ...session,
     ...updates,
-  };
-
-  await setSession(callSid, updatedSession);
-  return updatedSession;
+  }));
 }
 
 export async function updateSessionState(
   callSid: string,
   stateUpdates: Partial<SessionState>
 ): Promise<Session | null> {
-  const session = await getSession(callSid);
-
-  if (!session) {
-    return null;
-  }
-
-  const updatedSession: Session = {
+  return updateSessionAtomically(callSid, (session) => ({
     ...session,
     state: {
       ...session.state,
       ...stateUpdates,
     },
-  };
-
-  await setSession(callSid, updatedSession);
-  return updatedSession;
+  }));
 }
 
 export async function updateCollectedData(
   callSid: string,
   dataUpdates: Partial<CollectedData>
 ): Promise<Session | null> {
-  const session = await getSession(callSid);
-
-  if (!session) {
-    return null;
-  }
-
-  const updatedSession: Session = {
+  return updateSessionAtomically(callSid, (session) => ({
     ...session,
     collectedData: {
       ...session.collectedData,
       ...dataUpdates,
     },
-  };
-
-  await setSession(callSid, updatedSession);
-  return updatedSession;
+  }));
 }
 
 export async function addMessage(callSid: string, message: Message): Promise<void> {
-  const session = await getSession(callSid);
+  await updateSessionAtomically(callSid, (session) => ({
+    ...session,
+    messageHistory: [...session.messageHistory, message],
+  }));
+}
 
-  if (!session) {
-    logger.warn('Cannot add message to non-existent session', { callSid });
-    return;
-  }
+export async function appendResponseTime(callSid: string, durationMs: number): Promise<void> {
+  await updateSessionAtomically(callSid, (session) => ({
+    ...session,
+    metrics: {
+      ...session.metrics,
+      responseTimes: [...session.metrics.responseTimes, durationMs],
+    },
+  }));
+}
 
-  session.messageHistory.push(message);
-  await setSession(callSid, session);
+export async function appendToolCallMetric(
+  callSid: string,
+  toolCall: { name: string; durationMs: number }
+): Promise<void> {
+  await updateSessionAtomically(callSid, (session) => ({
+    ...session,
+    metrics: {
+      ...session.metrics,
+      toolCalls: [...session.metrics.toolCalls, toolCall],
+    },
+  }));
+}
+
+export async function appendConfidenceScore(callSid: string, confidence: number): Promise<void> {
+  await updateSessionAtomically(callSid, (session) => ({
+    ...session,
+    metrics: {
+      ...session.metrics,
+      confidenceScores: [...session.metrics.confidenceScores, confidence],
+    },
+  }));
+}
+
+export async function incrementLlmCalls(callSid: string, count: number = 1): Promise<void> {
+  await updateSessionAtomically(callSid, (session) => ({
+    ...session,
+    metrics: {
+      ...session.metrics,
+      llmCalls: session.metrics.llmCalls + count,
+    },
+  }));
+}
+
+export async function incrementTtsChunks(callSid: string, count: number = 1): Promise<void> {
+  await updateSessionAtomically(callSid, (session) => ({
+    ...session,
+    metrics: {
+      ...session.metrics,
+      ttsChunks: session.metrics.ttsChunks + count,
+    },
+  }));
 }
 
 export async function deleteSession(callSid: string): Promise<void> {
@@ -179,6 +239,11 @@ export default {
   updateSessionState,
   updateCollectedData,
   addMessage,
+  appendResponseTime,
+  appendToolCallMetric,
+  appendConfidenceScore,
+  incrementLlmCalls,
+  incrementTtsChunks,
   deleteSession,
   getActiveSessions,
   refreshSessionTTL,

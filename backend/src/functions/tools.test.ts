@@ -114,14 +114,24 @@ describe('validateToolArgs', () => {
     expect(validateToolArgs('get_patient_appointments', {})).toEqual({ valid: true });
   });
 
-  it('does not validate extraneous params (only checks required presence)', () => {
-    expect(
-      validateToolArgs('check_availability', {
-        date: '2026-05-21',
-        time: '10:00',
-        bogus_extra: 'whatever',
-      })
-    ).toEqual({ valid: true });
+  it('rejects extraneous params', () => {
+    const result = validateToolArgs('check_availability', {
+      date: '2026-05-21',
+      time: '10:00',
+      bogus_extra: 'whatever',
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/unrecognized key/i);
+  });
+
+  it('rejects invalid enum values', () => {
+    const result = validateToolArgs('transfer_to_staff', { reason: 'random' });
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects malformed emails', () => {
+    const result = validateToolArgs('update_patient_info', { email: 'not-an-email' });
+    expect(result.valid).toBe(false);
   });
 });
 
