@@ -2,6 +2,49 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-02 — Patients page lists all patients on load (frontend-only)
+
+The Patients page was blank on arrival because it never called the API until you typed — the backend `/api/patients/search` rejects an empty `q` with a 400. Rather than reintroduce the `GET /api/patients` browse route (removed 2026-05-31 under the frontend-only mandate), this lists everyone with **no backend change**: when the search box is empty the store now sends `q="%"`. The backend builds its filter as `ILIKE '%<q>%'` without escaping wildcards, so `"%"` becomes `"%%%"` and matches every patient. Verified live against the running stack: `?q=%` returns all 20 seeded patients (200); typed searches still work. Frontend `tsc --noEmit` clean.
+
+- **`frontend/store/patients.ts`** — removed the empty-query early-return; added a `MATCH_ALL_QUERY = "%"` sentinel used when `q` is blank so `refresh()` always fetches.
+- **`frontend/components/patients/PatientsPageClient.tsx`** — dropped the `!q.trim()` render gate so the table shows on load; the dashed empty state now appears only on a genuine zero-result set, with copy that distinguishes "no match for X" from "no patients found".
+
+## 2026-05-31 — Reverted all backend changes (frontend-only mandate)
+
+Per the user's directive to keep this project **frontend-only**, every backend edit made earlier today was reverted (`backend/**` restored to its committed state) and the dependent frontend was reworked to match. Verified: frontend `tsc` + `build` (24/24) + lint 0 errors; `backend/` git-clean.
+
+- **Users member management — removed.** The `/auth/users` routes are gone; `frontend/app/users/page.tsx` is back to create-member + change-own-password forms plus a "Member directory (backend needed)" placeholder; `frontend/lib/api/usersApi.ts` restored.
+- **Patients browse — removed.** The `GET /api/patients` route is gone; `frontend/store/patients.ts` + `components/patients/PatientsPageClient.tsx` are back to **search-only** (the list stays empty until you type a name/phone); `listPatients` removed from `lib/api/voiceAssistantApi.ts`.
+- **Status board** dropped the now-nonexistent `/api/patients` entry and resolves its patient sample via `/api/patients/search`.
+
+Everything else from today remains (all frontend): design-system retune, detail-page rebuilds, dashboard hub, status board, nav grouping, analytics date range, calls/appointments filters, local-dev proxy fallback.
+
+## 2026-05-31 — Nav grouping, analytics date range, list filters, Users polish
+
+Frontend-only information-architecture pass (no backend changes).
+
+- **Grouped navigation** — `frontend/components/nav.tsx`. Sidebar split into Operations (Appointments/Patients/Calls), Insights (Analytics), Knowledge (FAQs) and System (Sessions/Status/Users) with section headers; nav area made scroll-safe.
+- **Analytics date range** — `frontend/store/analytics.ts`, `lib/api/voiceAssistantApi.ts`, `components/analytics/AnalyticsPageClient.tsx`. 7d/30d/90d presets + custom start/end pickers wired to the existing `start_date`/`end_date` params the analytics endpoints already accept.
+- **Calls filters + pagination** — `frontend/components/calls/list/CallsFiltersBar.tsx`, `components/calls/CallsPageClient.tsx`. Added an outcome filter (client-side) and pause server pagination while a search/filter narrows the current page (prevents misleading "Next" jumps). Same pagination guard added to `components/appointments/AppointmentsPageClient.tsx`.
+- **Users page** — `frontend/app/users/page.tsx`. Added an honest "Member directory" placeholder that states listing/role-management needs a backend `GET /api/users` endpoint, so the page no longer looks half-finished.
+
+## 2026-05-31 — Status board, Dashboard hub, local-dev proxy fix
+
+- **Local dev login fixed** — `frontend/app/api/backend/[...path]/route.ts` read `BACKEND_BASE_URL` with no fallback, so running the frontend locally (backend in Docker on host `4001`) 500'd with "BACKEND_BASE_URL not set". Added a fallback to `http://localhost:4001` (canonical host port per `docker-compose.yml`) and set `BACKEND_BASE_URL` in `frontend/.env` (also corrected the stale `NEXT_PUBLIC_API_URL` `4000`→`4001`).
+- **Status page → full API health board** — `frontend/app/api/status/run/route.ts` now catalogues every backend endpoint (System/Auth/Appointments/Patients/Calls/Analytics/Sessions/FAQs) with method, path, auth level (public/authenticated/moderator) and a description. It health-checks only safe read endpoints (resolving real sample IDs for by-id routes) and never hits mutating ones. `frontend/components/StatusPageClient.tsx` groups results by domain and gives each a plain-language interpretation (401 → "auth failed", 403 → "needs moderator" / "already set up", 404 → "no sample data", 5xx → "reachable but failing", network → "backend not connected", 2xx+empty → "connected but no data yet"), with per-endpoint latency and a collapsible response preview.
+- **Dashboard → command center** — `frontend/app/dashboard/page.tsx`. Removed the duplicated analytics charts (they live on `/analytics`) and refocused the page on quick access: prominent global search, a compact 4-KPI pulse (numbers only), a quick-access tile grid linking to every section, and "Today's appointments" + "Recent calls" activity lists. A "Full analytics →" link points to the deep charts.
+
+## 2026-05-31 — Dashboard UI/UX overhaul
+
+Restyled every dashboard page on a shared design system and made the Patients page actually usable. Verified with frontend typecheck + lint (0 errors) + `next build` (24/24 routes) and backend typecheck.
+
+- **Design system retune (light + dark)** — `frontend/app/globals.css`, `frontend/tailwind.config.js`, `frontend/app/layout.tsx`. Calm, low-fatigue palette: no pure black/white (dark `#121419` bg / `#1c1f26` cards, light `#f6f7f9` bg), refined violet accent (violet-600 light / violet-400 dark), `color-scheme` so native selects/scrollbars follow the theme, themed scrollbars, accent selection + focus rings, subtle ambient accent glow, font-smoothing + system/Inter font stack, and an inline **anti-FOUC theme script** to kill the light/dark flash on load. Tokens exposed as Tailwind utilities (`bg-surface`, `text-muted`, `border-border`, `shadow-sm/md`).
+- **New shared UI primitives** — `frontend/components/ui/PageHeader.tsx`, `StatusPill.tsx` (semantic tone mapping + dot), `Field.tsx` (`Field`/`FieldGrid`/`Avatar`), upgraded `Button.tsx` (sizes, icons, link/`href`, `outline`/`subtle` variants), expanded `icons.tsx` (nav + action glyphs), `components/auth/AuthBrand.tsx`.
+- **Detail pages rebuilt** — `AppointmentDetailClient.tsx` (fixed broken field bindings that rendered every value as `—`: it read `date`/`time`/`provider_name` instead of `scheduled_time`/`provider`/`type`; now a 2-column layout with patient hero, schedule grid, status panel, record meta), `patients/details/*` (profile shows all fields in view mode + avatar; history uses shared `StatusPill`/`TableShell`), `calls/details/CallDetailClient.tsx` + `CallMetaCard.tsx`.
+- **Nav + chrome** — `components/nav.tsx` (icons per item, active accent bar, NeuroSpine brand mark), `themeToggle.tsx` (sun/moon segmented switch), `AppShell.tsx` (max-width content + page fade-in), `Card.tsx` (soft elevation).
+- **List pages standardized** on `PageHeader` + shared pills/buttons + formatted dates — appointments, patients, calls, analytics, sessions, faqs, status, users, and the login/signup/forgot auth screens.
+- **Patients table polish (frontend-only)** — `frontend/components/patients/list/PatientsTable.tsx` switched to the shared `TableShell`/`Button` and fixed the `preferred_language` snake-case mapping. (Note: a browse-all backend route was added then later reverted under the frontend-only mandate — see the top entry. The Patients list remains search-only.)
+
 ## 2026-05-30 — Dashboard & analytics data visualization overhaul
 
 Rebuilt how the dashboard surfaces data: replaced bland text rows / empty tables with a dependency-free SVG/CSS chart layer (no new npm deps, so the Docker `next build` stays safe). Verified with frontend typecheck, lint, and `next build` (all clean).

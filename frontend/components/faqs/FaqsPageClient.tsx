@@ -7,6 +7,8 @@ import { useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { ErrorCard } from "@/components/ui/ErrorCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { HelpIcon, RefreshIcon, SparkIcon } from "@/components/ui/icons";
 import { useFaqsStore } from "@/store/faqs";
 import { FaqsFiltersBar } from "./list/FaqsFiltersBar";
 import { FaqsTable } from "./list/FaqsTable";
@@ -66,24 +68,22 @@ useEffect(() => {
   }, [qDebounced, rows]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">FAQs</h1>
-          <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-            Create, edit, and deactivate FAQ entries used by the voice assistant.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="ghost" onClick={refresh} disabled={loading}>
-            Refresh
-          </Button>
-          <Button variant="primary" onClick={openCreate} disabled={loading}>
-            New FAQ
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={<HelpIcon />}
+        title="FAQs"
+        subtitle="Create, edit, and deactivate FAQ entries used by the voice assistant."
+        actions={
+          <>
+            <Button variant="outline" icon={<RefreshIcon size={16} />} onClick={refresh} disabled={loading}>
+              Refresh
+            </Button>
+            <Button variant="primary" icon={<SparkIcon size={16} />} onClick={openCreate} disabled={loading}>
+              New FAQ
+            </Button>
+          </>
+        }
+      />
 
       <FaqsFiltersBar
         q={q}

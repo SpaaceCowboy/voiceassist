@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -20,10 +20,11 @@ async function fetchText(url: string): Promise<DebugResult> {
 
 export default function DebugDataPage() {
   const [items, setItems] = useState<DebugResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  async function run() {
-    setLoading(true);
+  // Pure fetcher: no setState inside, so the effect can call it without
+  // synchronously updating state (state is set in the .then callbacks).
+  const fetchAll = useCallback(async (): Promise<DebugResult[]> => {
     const today = new Date().toISOString().slice(0, 10);
 
     const targets = [
@@ -40,13 +41,28 @@ export default function DebugDataPage() {
       const r = await fetchText(t.url);
       results.push({ ...r, name: t.name });
     }
-    setItems(results);
-    setLoading(false);
-  }
+    return results;
+  }, []);
 
   useEffect(() => {
-    void run();
-  }, []);
+    let cancelled = false;
+    fetchAll().then((r) => {
+      if (cancelled) return;
+      setItems(r);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchAll]);
+
+  function run() {
+    setLoading(true);
+    fetchAll().then((r) => {
+      setItems(r);
+      setLoading(false);
+    });
+  }
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,7 @@
 // Path: components/appointments/list/AppointmentsTable.tsx
-import Link from "next/link";
 import type { Appointment } from "@/lib/types";
-import { AppointmentStatusPill } from "./AppointmentStatusPill";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { Button } from "@/components/ui/Button";
 import { TableShell, THead, TH, TR, TD } from "@/components/ui/TableShell";
 
 function readString(obj: Record<string, unknown>, key: string): string | null {
@@ -89,6 +89,18 @@ function pickStatus(a: Appointment): string {
   return readString(o, "status") ?? "—";
 }
 
+function fmtDateTime(raw: string): string {
+  if (!raw || raw === "—") return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function AppointmentsTable({ rows }: { rows: Appointment[] }) {
   return (
     <TableShell>
@@ -112,30 +124,19 @@ export function AppointmentsTable({ rows }: { rows: Appointment[] }) {
           return (
             <TR key={key}>
               <TD className="font-medium">{pickPatientName(a)}</TD>
-              <TD>{pickDateTime(a)}</TD>
+              <TD className="whitespace-nowrap">{fmtDateTime(pickDateTime(a))}</TD>
               <TD>{pickDepartment(a)}</TD>
               <TD>{pickProvider(a)}</TD>
               <TD>
-                <AppointmentStatusPill value={pickStatus(a)} />
+                <StatusPill value={pickStatus(a)} size="sm" />
               </TD>
               <TD>
                 {id ? (
-                  <Link
-                    href={`/appointments/${id}`}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm"
-                    style={{
-                      background: "rgb(var(--surface2))",
-                      borderColor: "rgb(var(--border))",
-                      color: "rgb(var(--text))",
-                    }}
-                  >
-                    View <span aria-hidden>→</span>
-                  </Link>
+                  <Button variant="outline" size="sm" href={`/appointments/${id}`}>
+                    View
+                  </Button>
                 ) : (
-                  <span
-                    className="text-xs"
-                    style={{ color: "rgb(var(--muted))" }}
-                  >
+                  <span className="text-xs" style={{ color: "rgb(var(--muted))" }}>
                     No ID
                   </span>
                 )}

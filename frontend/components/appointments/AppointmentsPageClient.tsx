@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { CalendarIcon } from "@/components/ui/icons";
 import { useAppointmentsStore } from "@/store/appointments";
 import { AppointmentsFiltersBar } from "./list/AppointmentsFiltersBar";
 import { AppointmentsTable } from "./list/AppointmentsTable";
@@ -93,17 +95,29 @@ export default function AppointmentsPageClient() {
     return rows.filter((a) => includesQuery(apptSearchParts(a), t));
   }, [qDebounced, rows]);
 
-  const hasPrev = offset > 0;
-  const hasNext = offset + limit < count;
+  // Client search filters only the current page, so pause server pagination
+  // while searching to keep Prev/Next from making misleading jumps.
+  const searching = qDebounced.trim().length > 0;
+  const hasPrev = offset > 0 && !searching;
+  const hasNext = offset + limit < count && !searching;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Appointments</h1>
-        <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          View appointments by scope/date with status filter and pagination.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={<CalendarIcon />}
+        title="Appointments"
+        subtitle="View appointments by scope and date, filter by status, and page through results."
+        badge={
+          !loading ? (
+            <span
+              className="rounded-full border px-2.5 py-1 text-xs"
+              style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+            >
+              {count} total
+            </span>
+          ) : null
+        }
+      />
 
       <AppointmentsFiltersBar
         scope={scope}

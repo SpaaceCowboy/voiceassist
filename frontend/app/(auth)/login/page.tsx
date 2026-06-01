@@ -3,9 +3,10 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { AuthBrand } from "@/components/auth/AuthBrand";
 import { login } from "@/lib/authApi";
 import { useAuthStore, type AuthState } from "@/store/auth";
 
@@ -91,42 +92,49 @@ function LoginPageInner() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <Card>
-          <CardHeader title="Admin Login" subtitle="ByteForge ERP" />
-          <CardBody>
-            <form onSubmit={onSubmit} className="space-y-3">
-              <Input
-                type="email"
-                value={email}
-                onChange={setEmail}
-                placeholder="Email"
-              />
-              <Input
-                type="password"
-                value={password}
-                onChange={setPassword}
-                placeholder="Password"
-              />
-              {err ? (
-                <div className="text-sm text-red-600 dark:text-red-200">
-                  {err}
-                </div>
-              ) : null}
-              <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? "Signing in…" : "Sign in"}
-              </Button>
-              <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-                Don&apos;t have an account?{" "}
-                <Link href="/signup" style={{ color: "rgb(var(--accent))" }}>
-                  Sign up
-                </Link>
-              </p>
-            </form>
-          </CardBody>
-        </Card>
-      </div>
+    <div className="w-full max-w-sm">
+      <Card className="p-6">
+        <AuthBrand subtitle="Sign in to your dashboard" />
+        <form onSubmit={onSubmit} className="space-y-4">
+          <label className="block">
+            <span className="mb-1 block text-xs" style={{ color: "rgb(var(--muted))" }}>
+              Email
+            </span>
+            <Input type="email" value={email} onChange={setEmail} placeholder="you@example.com" className="w-full" />
+          </label>
+          <label className="block">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs" style={{ color: "rgb(var(--muted))" }}>
+                Password
+              </span>
+              <Link href="/login/forgot-password" className="text-xs" style={{ color: "rgb(var(--accent))" }}>
+                Forgot?
+              </Link>
+            </div>
+            <Input type="password" value={password} onChange={setPassword} placeholder="••••••••" className="w-full" />
+          </label>
+
+          {err ? (
+            <div
+              className="rounded-lg px-3 py-2 text-sm"
+              style={{ background: "rgba(239,68,68,0.1)", color: "rgb(239,68,68)" }}
+            >
+              {err}
+            </div>
+          ) : null}
+
+          <Button type="submit" variant="primary" fullWidth size="lg" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </Button>
+
+          <p className="text-center text-sm" style={{ color: "rgb(var(--muted))" }}>
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" style={{ color: "rgb(var(--accent))" }}>
+              Sign up
+            </Link>
+          </p>
+        </form>
+      </Card>
     </div>
   );
 }

@@ -2,61 +2,150 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #fafafa;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-}
+/* ============================================================
+   NeuroSpine dashboard — design tokens
+   Goal: a calm, low-fatigue workspace. No pure black / pure white,
+   gentle contrast, one refined violet accent, semantic status hues.
+   Everything downstream reads these CSS variables, so retuning here
+   restyles the whole app in both themes.
+   ============================================================ */
 
 :root {
-  /* surfaces */
-  --bg: 248 250 252; /* slate-50-ish */
-  --surface: 255 255 255; /* cards */
-  --surface2: 245 246 248; /* headers/panels */
-  --border: 226 232 240; /* slate-200 */
-  --text: 15 23 42; /* slate-900 */
-  --muted: 100 116 139; /* slate-500 */
+  color-scheme: light;
 
-  /* accent (Electric Violet) */
-  --accent: 139 92 246; /* violet-500 */
-  --accent2: 167 139 250; /* violet-400 */
+  /* surfaces — soft off-white, never glaring */
+  --bg: 246 247 249;        /* app background */
+  --surface: 255 255 255;   /* cards */
+  --surface2: 241 243 246;  /* insets, headers, inputs */
+  --border: 228 231 236;    /* hairline borders */
+  --text: 28 31 38;         /* near-black, easier than pure #000 */
+  --muted: 107 114 128;     /* secondary text */
+
+  /* accent — refined violet (violet-600 for crisp contrast on white) */
+  --accent: 124 58 237;
+  --accent2: 139 92 246;
+
+  /* elevation */
+  --shadow-sm: 0 1px 2px rgba(16, 18, 27, 0.06);
+  --shadow-md: 0 6px 20px rgba(16, 18, 27, 0.08);
+
+  --radius: 16px;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 html.dark {
-  --bg: 11 15 20; /* deep graphite */
-  --surface: 15 20 27; /* dark card */
-  --surface2: 19 25 33; /* dark header/panel */
-  --border: 42 51 66; /* subtle border */
-  --text: 226 232 240; /* slate-200 */
-  --muted: 148 163 184; /* slate-400 */
+  color-scheme: dark;
 
-  --accent: 167 139 250; /* violet-400 */
-  --accent2: 196 181 253; /* violet-300 */
+  /* soft graphite — dim, not black */
+  --bg: 18 20 25;           /* #121419 */
+  --surface: 28 31 38;      /* #1c1f26 — cards lift off the bg */
+  --surface2: 35 38 46;     /* #23262e */
+  --border: 46 50 60;       /* #2e323c */
+  --text: 230 232 238;      /* soft white, not #fff */
+  --muted: 152 159 171;     /* #989fab */
+
+  /* lighter violet reads better on dark */
+  --accent: 167 139 250;
+  --accent2: 196 181 253;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.40);
 }
 
-/* background */
+/* ---- base ------------------------------------------------- */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: rgb(var(--bg));
   color: rgb(var(--text));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* subtle theme-switch easing without janking every paint */
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* accent focus ring for all focusable elements */
+/* gentle ambient depth so the canvas isn't a flat slab (kept very subtle) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    60rem 32rem at 78% -8%,
+    rgba(var(--accent), 0.07),
+    transparent 60%
+  );
+}
+
+/* tabular figures for data so columns don't jitter */
+table,
+[data-nums] {
+  font-variant-numeric: tabular-nums;
+}
+
+code,
+kbd,
+pre,
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ---- accent focus ring ------------------------------------ */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+[tabindex]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgb(var(--bg)), 0 0 0 4px rgb(var(--accent));
+  border-radius: 12px;
+}
+
+/* ---- selection -------------------------------------------- */
+::selection {
+  background: rgba(var(--accent), 0.28);
+  color: rgb(var(--text));
+}
+
+/* ---- themed scrollbars ------------------------------------ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 999px;
+  border: 2px solid rgb(var(--bg));
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--muted));
+}
+
+/* ---- motion preferences ----------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -5,9 +5,20 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
+const OUTCOMES = ["booked", "transferred", "faq_only", "completed", "failed"] as const;
+
+const selectStyle = {
+  background: "rgb(var(--surface2))",
+  borderColor: "rgb(var(--border))",
+  color: "rgb(var(--text))",
+} as const;
+
 type Props = {
   q: string;
   setQ: (v: string) => void;
+
+  outcome: string;
+  setOutcome: (v: string) => void;
 
   limit: number;
   setLimit: (n: number) => void;
@@ -15,6 +26,7 @@ type Props = {
   offset: number;
   hasPrev: boolean;
   hasNext: boolean;
+  paused: boolean;
 
   onPrev: () => void;
   onNext: () => void;
@@ -28,20 +40,31 @@ type Props = {
 
 export function CallsFiltersBar(p: Props) {
   return (
-    <Card className="p-3 flex flex-wrap gap-2 items-center">
-      <Input value={p.q} onChange={p.setQ} placeholder="Search calls…" className="w-80" />
+    <Card className="flex flex-wrap items-center gap-2 p-3">
+      <Input value={p.q} onChange={p.setQ} placeholder="Search calls…" className="w-72" />
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs" style={{ color: "rgb(var(--muted))" }}>Outcome</span>
+        <select
+          value={p.outcome}
+          onChange={(e) => p.setOutcome(e.target.value)}
+          className="rounded-xl border px-3 py-2 text-sm capitalize"
+          style={selectStyle}
+        >
+          <option value="">All</option>
+          {OUTCOMES.map((o) => (
+            <option key={o} value={o}>{o.replace(/_/g, " ")}</option>
+          ))}
+        </select>
+      </div>
 
       <div className="flex items-center gap-2">
         <span className="text-xs" style={{ color: "rgb(var(--muted))" }}>Limit</span>
         <select
           value={String(p.limit)}
           onChange={(e) => p.setLimit(Number(e.target.value))}
-          className="px-3 py-2 rounded-xl border text-sm"
-          style={{
-            background: "rgb(var(--surface2))",
-            borderColor: "rgb(var(--border))",
-            color: "rgb(var(--text))",
-          }}
+          className="rounded-xl border px-3 py-2 text-sm"
+          style={selectStyle}
         >
           {[10, 25, 50, 100].map((n) => (
             <option key={n} value={String(n)}>{n}</option>
@@ -49,16 +72,17 @@ export function CallsFiltersBar(p: Props) {
         </select>
       </div>
 
-      <Button variant="primary" onClick={p.onRefresh} disabled={p.loading}>
+      <Button variant="outline" onClick={p.onRefresh} disabled={p.loading}>
         {p.loading ? "Loading…" : "Refresh"}
       </Button>
 
       <div className="ml-auto flex items-center gap-2">
         <Button variant="ghost" onClick={p.onPrev} disabled={!p.hasPrev}>Prev</Button>
         <Button variant="ghost" onClick={p.onNext} disabled={!p.hasNext}>Next</Button>
-
         <div className="text-xs" style={{ color: "rgb(var(--muted))" }}>
-          {p.showing} shown • total {p.total} • offset {p.offset}
+          {p.paused
+            ? `${p.showing} filtered`
+            : `${p.showing} shown · ${p.total} total`}
         </div>
       </div>
     </Card>

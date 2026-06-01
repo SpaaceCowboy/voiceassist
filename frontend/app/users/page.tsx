@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { UsersIcon } from "@/components/ui/icons";
 import { registerUser, changeMyPassword, type Role } from "@/lib/api/usersApi";
 import { useAuthStore } from "@/store/auth";
 
@@ -85,16 +87,47 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Users</h1>
-        <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          Create members (moderator/user) and manage your own password.
-        </p>
-        <p className="text-xs mt-1" style={{ color: "rgb(var(--muted))" }}>
-          Logged in as: {me?.email ?? "—"} ({me?.role ?? "—"})
-        </p>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-5">
+      <PageHeader
+        icon={<UsersIcon />}
+        title="Users"
+        subtitle="Create members (moderator/user) and manage your own password."
+        badge={
+          me?.email ? (
+            <span
+              className="rounded-full border px-2.5 py-1 text-xs"
+              style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+            >
+              {me.email} · {me?.role ?? "—"}
+            </span>
+          ) : null
+        }
+      />
+
+      {/* Member directory — listing/management lives in the backend, which is out of scope here */}
+      <Card className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold">Member directory</div>
+            <div className="mt-0.5 text-sm" style={{ color: "rgb(var(--muted))" }}>
+              Listing members, editing roles, deactivating accounts and resetting other users&apos;
+              passwords require backend endpoints that aren&apos;t available to the dashboard yet.
+            </div>
+          </div>
+          <span
+            className="shrink-0 rounded-full border px-2.5 py-1 text-xs"
+            style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+          >
+            Backend needed
+          </span>
+        </div>
+        <div
+          className="mt-4 rounded-xl border border-dashed px-4 py-8 text-center text-sm"
+          style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+        >
+          A member list will appear here once a users API is exposed by the backend.
+        </div>
+      </Card>
 
       {/* Create User */}
       <Card>
@@ -187,10 +220,6 @@ export default function UsersPage() {
               {pwErr}
             </div>
           ) : null}
-
-          <div className="mt-3 text-xs" style={{ color: "rgb(var(--muted))" }}>
-            Resetting other users’ passwords is a future feature and needs a separate endpoint (admin-only).
-          </div>
         </CardBody>
       </Card>
     </div>

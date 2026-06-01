@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { AuthBrand } from "@/components/auth/AuthBrand";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -54,11 +55,8 @@ export default function ForgotPasswordPage() {
 
   return (
     <Card className="w-full max-w-sm p-6">
-      <h1 className="text-xl font-semibold mb-1">Forgot password</h1>
-      <p
-        className="text-sm mb-6"
-        style={{ color: "rgb(var(--muted))" }}
-      >
+      <AuthBrand subtitle="Reset your password" />
+      <p className="mb-6 text-center text-sm" style={{ color: "rgb(var(--muted))" }}>
         Enter your email and we&apos;ll send you a link to reset your password.
       </p>
 

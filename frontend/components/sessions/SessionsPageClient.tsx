@@ -4,7 +4,9 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { ErrorCard } from "@/components/ui/ErrorCard";
-import { SkeletonText } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { LayersIcon, RefreshIcon } from "@/components/ui/icons";
 import { useSessionsStore } from "@/store/sessions";
 import { SessionsStatsCards } from "./stats/SessionsStatsCards";
 import { SessionsActionsCard } from "./stats/SessionsActionsCard";
@@ -19,25 +21,25 @@ export default function SessionsPageClient() {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Sessions</h1>
-          <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-            Session statistics and cleanup.
-          </p>
-        </div>
-
-        <Button variant="ghost" onClick={refresh} disabled={loading}>
-          Refresh
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={<LayersIcon />}
+        title="Sessions"
+        subtitle="Live session statistics and cleanup."
+        actions={
+          <Button variant="outline" icon={<RefreshIcon size={16} />} onClick={refresh} disabled={loading}>
+            Refresh
+          </Button>
+        }
+      />
 
       {error ? <ErrorCard message={error} /> : null}
 
       {loading && !stats ? (
-        <div className="rounded-2xl border p-4" style={{ background: "rgb(var(--surface))", borderColor: "rgb(var(--border))" }}>
-          <SkeletonText lines={6} />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
         </div>
       ) : (
         <SessionsStatsCards stats={stats} />

@@ -6,14 +6,58 @@ import { useState, useRef, useEffect } from "react";
 import { ThemeToggle } from "@/components/themeToggle";
 import { useAuthStore, type AuthState } from "@/store/auth";
 import { logout } from "@/lib/authApi";
+import {
+  HomeIcon,
+  UsersIcon,
+  CalendarIcon,
+  HeartPulseIcon,
+  PhoneIcon,
+  ChartIcon,
+  LayersIcon,
+  HelpIcon,
+  ActivityIcon,
+} from "@/components/ui/icons";
+
+const NAV_SECTIONS = [
+  {
+    title: null,
+    items: [{ href: "/dashboard", label: "Dashboard", Icon: HomeIcon }],
+  },
+  {
+    title: "Operations",
+    items: [
+      { href: "/appointments", label: "Appointments", Icon: CalendarIcon },
+      { href: "/patients", label: "Patients", Icon: HeartPulseIcon },
+      { href: "/calls", label: "Calls", Icon: PhoneIcon },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [{ href: "/analytics", label: "Analytics", Icon: ChartIcon }],
+  },
+  {
+    title: "Knowledge",
+    items: [{ href: "/faqs", label: "FAQs", Icon: HelpIcon }],
+  },
+  {
+    title: "System",
+    items: [
+      { href: "/sessions", label: "Sessions", Icon: LayersIcon },
+      { href: "/status", label: "Status", Icon: ActivityIcon },
+      { href: "/users", label: "Users", Icon: UsersIcon },
+    ],
+  },
+] as const;
 
 function NavLink({
   href,
   pathname,
+  Icon,
   children,
 }: {
   href: string;
   pathname: string;
+  Icon: (p: { size?: number; className?: string }) => React.ReactNode;
   children: React.ReactNode;
 }) {
   const active =
@@ -21,13 +65,22 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`block px-3 py-2.5 rounded-xl text-sm transition ${
+      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
         active
           ? "bg-[rgb(var(--accent))]/15 text-[rgb(var(--accent))] font-medium"
           : "text-[rgb(var(--text))] hover:bg-[rgb(var(--surface2))]"
       }`}
     >
-      {children}
+      <span
+        className={`absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[rgb(var(--accent))] transition-opacity ${
+          active ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <Icon
+        size={18}
+        className={active ? "opacity-100" : "opacity-60 group-hover:opacity-90"}
+      />
+      <span>{children}</span>
     </Link>
   );
 }
@@ -116,42 +169,46 @@ export function Nav() {
         borderRight: "1px solid rgb(var(--border))",
       }}
     >
-      <div className="p-4 flex flex-col gap-4">
-        <div
-          className="font-semibold text-lg"
-          style={{ color: "rgb(var(--text))" }}
-        >
-          ERP Dashboard
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="flex items-center gap-2.5 px-1 pt-1">
+          <span
+            className="grid h-9 w-9 place-items-center rounded-xl font-bold text-white"
+            style={{
+              background:
+                "linear-gradient(135deg, rgb(var(--accent)) 0%, rgba(var(--accent),0.7) 100%)",
+              boxShadow: "0 4px 14px rgba(var(--accent),0.30)",
+            }}
+          >
+            N
+          </span>
+          <div className="leading-tight">
+            <div className="font-semibold" style={{ color: "rgb(var(--text))" }}>
+              NeuroSpine
+            </div>
+            <div className="text-[11px]" style={{ color: "rgb(var(--muted))" }}>
+              Voice Assistant
+            </div>
+          </div>
         </div>
         <ThemeToggle />
-        <nav className="space-y-0.5">
-          <NavLink href="/dashboard" pathname={pathname}>
-            Dashboard
-          </NavLink>
-          <NavLink href="/users" pathname={pathname}>
-            Users
-          </NavLink>
-          <NavLink href="/appointments" pathname={pathname}>
-            Appointments
-          </NavLink>
-          <NavLink href="/patients" pathname={pathname}>
-            Patients
-          </NavLink>
-          <NavLink href="/calls" pathname={pathname}>
-            Calls
-          </NavLink>
-          <NavLink href="/analytics" pathname={pathname}>
-            Analytics
-          </NavLink>
-          <NavLink href="/sessions" pathname={pathname}>
-            Sessions
-          </NavLink>
-          <NavLink href="/faqs" pathname={pathname}>
-            FAQs
-          </NavLink>
-          <NavLink href="/status" pathname={pathname}>
-            Status
-          </NavLink>
+        <nav className="space-y-4">
+          {NAV_SECTIONS.map((section, i) => (
+            <div key={section.title ?? `top-${i}`} className="space-y-0.5">
+              {section.title ? (
+                <div
+                  className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: "rgb(var(--muted))" }}
+                >
+                  {section.title}
+                </div>
+              ) : null}
+              {section.items.map(({ href, label, Icon }) => (
+                <NavLink key={href} href={href} pathname={pathname} Icon={Icon}>
+                  {label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
         </nav>
       </div>
 

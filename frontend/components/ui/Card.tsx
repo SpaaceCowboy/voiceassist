@@ -7,7 +7,7 @@ export function Card({ children, className = "", style, ...rest }: CardProps) {
   return (
     <div
       {...rest}
-      className={`rounded-2xl border ${className}`}
+      className={`rounded-2xl border shadow-sm ${className}`}
       style={{
         background: `rgb(var(--surface))`,
         borderColor: `rgb(var(--border))`,

@@ -4,6 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { HeartPulseIcon, SearchIcon } from "@/components/ui/icons";
 import { usePatientsStore } from "@/store/patients";
 import { PatientsFiltersBar } from "./list/PatientsFiltersBar";
 import { PatientsTable } from "./list/PatientsTable";
@@ -57,13 +59,12 @@ export default function PatientsPageClient() {
   const hasNext = offset + limit < count;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Patients</h1>
-        <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          Search patients and open profile with appointment history.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={<HeartPulseIcon />}
+        title="Patients"
+        subtitle="Search patients and open a profile with full appointment history."
+      />
 
       <PatientsFiltersBar
         q={q}
@@ -84,12 +85,15 @@ export default function PatientsPageClient() {
       {error ? <ErrorCard message={error} /> : null}
       {loading ? (
         <SkeletonTable rows={6} />
-      ) : !q.trim() ? (
+      ) : rows.length === 0 ? (
         <div
-          className="rounded-md border p-8 text-center text-sm"
+          className="flex flex-col items-center gap-2 rounded-2xl border border-dashed p-12 text-center text-sm"
           style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
         >
-          Start typing a name or phone number to search for patients.
+          <SearchIcon size={28} className="opacity-50" />
+          {q.trim()
+            ? `No patients match “${q.trim()}”.`
+            : "No patients found."}
         </div>
       ) : (
         <PatientsTable rows={rows} />

@@ -24,6 +24,10 @@ type Store = {
 
 const CACHE_TTL_MS = 8000;
 
+// Sent as `q` when the search box is empty so the backend returns every
+// patient (ILIKE '%%%' matches all). See refresh() for details.
+const MATCH_ALL_QUERY = "%";
+
 function clampOffset(n: number): number {
   return n < 0 ? 0 : n;
 }
@@ -51,24 +55,16 @@ export const usePatientsStore = create<Store>((set, get) => ({
   refresh: async () => {
     const s = get();
     const query = s.q.trim();
-    const key = makeKey(s.q, s.limit, s.offset);
-
-    if (s.lastFetchedAt && s.lastKey === key && Date.now() - s.lastFetchedAt < CACHE_TTL_MS) {
-      return;
-    }
 
     // The backend /patients/search endpoint requires a non-empty `q`
-    // (q: z.string().min(1)). With no search term, skip the request and show
-    // an empty result instead of triggering a 400 "Invalid query parameters".
-    if (!query) {
-      set({
-        rows: [],
-        count: 0,
-        loading: false,
-        error: null,
-        lastFetchedAt: Date.now(),
-        lastKey: key,
-      });
+    // (q: z.string().min(1)) and builds its WHERE clause as `ILIKE '%<q>%'`
+    // without escaping wildcards. So when there's no search term we send a
+    // lone "%" — the pattern becomes "%%%", which matches every patient and
+    // lets us list everyone on load with no backend change.
+    const effectiveQuery = query.length > 0 ? query : MATCH_ALL_QUERY;
+    const key = makeKey(effectiveQuery, s.limit, s.offset);
+
+    if (s.lastFetchedAt && s.lastKey === key && Date.now() - s.lastFetchedAt < CACHE_TTL_MS) {
       return;
     }
 
@@ -76,7 +72,7 @@ export const usePatientsStore = create<Store>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const res = await searchPatients({
-        q: query,
+        q: effectiveQuery,
         limit: s.limit,
         offset: s.offset,
       });

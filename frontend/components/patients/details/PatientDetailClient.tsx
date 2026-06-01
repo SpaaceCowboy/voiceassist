@@ -2,11 +2,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { SkeletonText } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorCard } from "@/components/ui/ErrorCard";
+import { HeartPulseIcon, RefreshIcon, CheckCircleIcon } from "@/components/ui/icons";
 import { getPatient, updatePatient } from "@/lib/api/voiceAssistantApi";
 import type { Patient } from "@/lib/types";
 import { PatientProfileCard } from "./PatientProfileCard";
@@ -91,7 +93,6 @@ function mapHistoryFromPatient(patient: Patient): HistoryItem[] {
 }
 
 export default function PatientDetailClient() {
-  const router = useRouter();
   const params = useParams();
 
   const rawId = useMemo(() => {
@@ -152,55 +153,73 @@ export default function PatientDetailClient() {
     }
   }
 
+  const header = (
+    <PageHeader
+      icon={<HeartPulseIcon />}
+      backHref="/patients"
+      title={`Patient #${idNorm ?? "—"}`}
+      subtitle="Profile and appointment history."
+      actions={
+        <Button
+          variant="outline"
+          icon={<RefreshIcon size={16} />}
+          onClick={() => idNorm && void load(idNorm)}
+          disabled={!idNorm || loading}
+        >
+          Refresh
+        </Button>
+      }
+    />
+  );
+
   if (loading) {
     return (
-      <Card className="p-4">
-        <SkeletonText lines={7} />
-      </Card>
+      <div className="space-y-5">
+        {header}
+        <Skeleton className="h-44" />
+        <Skeleton className="h-64" />
+      </div>
     );
   }
 
-  if (err) return <ErrorCard message={err} />;
+  if (err) {
+    return (
+      <div className="space-y-5">
+        {header}
+        <ErrorCard message={err} />
+      </div>
+    );
+  }
 
   if (!patient) {
     return (
-      <Card className="p-4">
-        <div className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          Not found.
-        </div>
-      </Card>
+      <div className="space-y-5">
+        {header}
+        <Card className="p-10 text-center">
+          <div className="text-sm" style={{ color: "rgb(var(--muted))" }}>
+            Patient not found.
+          </div>
+        </Card>
+      </div>
     );
   }
 
   const mappedHistory = mapHistoryFromPatient(patient);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Patient #{idNorm ?? "—"}</h1>
-          <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-            Profile and appointment history.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => router.push("/patients")}>
-            Back
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => idNorm && void load(idNorm)}
-            disabled={!idNorm}
-          >
-            Refresh
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      {header}
 
       {note ? (
-        <div className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          {note}
+        <div
+          className="flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"
+          style={{
+            background: "rgba(16,185,129,0.10)",
+            borderColor: "rgba(16,185,129,0.30)",
+            color: "rgb(5,150,105)",
+          }}
+        >
+          <CheckCircleIcon size={16} /> {note}
         </div>
       ) : null}
 

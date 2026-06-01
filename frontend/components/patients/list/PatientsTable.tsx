@@ -1,6 +1,7 @@
 // Path: components/patients/list/PatientsTable.tsx
-import Link from "next/link";
 import type { Patient } from "@/lib/types";
+import { Button } from "@/components/ui/Button";
+import { TableShell, THead, TH, TR, TD } from "@/components/ui/TableShell";
 
 function readString(obj: Record<string, unknown>, key: string): string | null {
   const v = obj[key];
@@ -46,73 +47,57 @@ function pickEmail(p: Patient): string {
 
 function pickLanguage(p: Patient): string {
   const obj = p as unknown as Record<string, unknown>;
-  return readString(obj, "preferredLanguage") ?? "—";
+  return readString(obj, "preferredLanguage") ?? readString(obj, "preferred_language") ?? "—";
 }
 
 export function PatientsTable({ rows }: { rows: Patient[] }) {
   return (
-    <div
-      className="rounded-2xl border overflow-hidden"
-      style={{ background: "rgb(var(--surface))", borderColor: "rgb(var(--border))" }}
-    >
-      <table className="w-full text-sm">
-        <thead style={{ background: "rgb(var(--surface2))" }}>
-          <tr>
-            <th className="text-left p-3">Name</th>
-            <th className="text-left p-3">Phone</th>
-            <th className="text-left p-3">DOB</th>
-            <th className="text-left p-3">Email</th>
-            <th className="text-left p-3">Language</th>
-            <th className="text-left p-3 w-[140px]">Actions</th>
-          </tr>
-        </thead>
+    <TableShell>
+      <THead>
+        <tr>
+          <TH>Name</TH>
+          <TH>Phone</TH>
+          <TH>DOB</TH>
+          <TH>Email</TH>
+          <TH>Language</TH>
+          <TH widthClass="w-[120px]">Actions</TH>
+        </tr>
+      </THead>
 
-        <tbody>
-          {rows.map((pat, idx) => {
-            const id = pickId(pat);
-            const key = id ? `patient:${id}` : `row:${idx}`;
-            return (
-              <tr
-                key={key}
-                className="border-t border-black/10 dark:border-white/10 hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
-              >
-                <td className="p-3 font-medium">{pickName(pat)}</td>
-                <td className="p-3">{pickPhone(pat)}</td>
-                <td className="p-3">{pickDob(pat)}</td>
-                <td className="p-3">{pickEmail(pat)}</td>
-                <td className="p-3">{pickLanguage(pat)}</td>
-                <td className="p-3">
-                  {id ? (
-                    <Link
-                      href={`/patients/${id}`}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm"
-                      style={{
-                        background: "rgb(var(--surface2))",
-                        borderColor: "rgb(var(--border))",
-                        color: "rgb(var(--text))",
-                      }}
-                    >
-                      View <span aria-hidden>→</span>
-                    </Link>
-                  ) : (
-                    <span className="text-xs" style={{ color: "rgb(var(--muted))" }}>
-                      No ID
-                    </span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+      <tbody>
+        {rows.map((pat, idx) => {
+          const id = pickId(pat);
+          const key = id ? `patient:${id}` : `row:${idx}`;
+          return (
+            <TR key={key}>
+              <TD className="font-medium">{pickName(pat)}</TD>
+              <TD>{pickPhone(pat)}</TD>
+              <TD>{pickDob(pat)}</TD>
+              <TD>{pickEmail(pat)}</TD>
+              <TD>{pickLanguage(pat)}</TD>
+              <TD>
+                {id ? (
+                  <Button variant="outline" size="sm" href={`/patients/${id}`}>
+                    View
+                  </Button>
+                ) : (
+                  <span className="text-xs" style={{ color: "rgb(var(--muted))" }}>
+                    No ID
+                  </span>
+                )}
+              </TD>
+            </TR>
+          );
+        })}
 
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="p-6 text-center text-sm" style={{ color: "rgb(var(--muted))" }}>
-                No results.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-    </div>
+        {rows.length === 0 ? (
+          <TR>
+            <TD colSpan={6} className="p-6 text-center text-sm" style={{ color: "rgb(var(--muted))" }}>
+              No results.
+            </TD>
+          </TR>
+        ) : null}
+      </tbody>
+    </TableShell>
   );
 }

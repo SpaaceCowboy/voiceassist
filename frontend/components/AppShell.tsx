@@ -40,8 +40,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Nav />
-      <main className="flex-1 ml-60 p-6 min-w-0">
-        {children}
+      <main className="ml-60 min-w-0 flex-1 px-6 py-6 lg:px-10 lg:py-8">
+        <div key={pathname} className="mx-auto w-full max-w-[1400px] animate-fade-in">
+          {children}
+        </div>
       </main>
     </div>
   );

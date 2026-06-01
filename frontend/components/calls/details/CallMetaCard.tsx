@@ -1,6 +1,8 @@
-// Path: components/calls/detail/CallMetaCard.tsx
+// Path: components/calls/details/CallMetaCard.tsx
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { StatusPill, type Tone } from "@/components/ui/StatusPill";
+import { Field, FieldGrid } from "@/components/ui/Field";
+import { PhoneIcon } from "@/components/ui/icons";
 
 type CallLike = Record<string, unknown>;
 
@@ -10,18 +12,7 @@ function s(v: unknown): string {
   return "";
 }
 
-function field(label: string, value: string) {
-  return (
-    <div className="text-sm">
-      <div className="text-xs mb-1" style={{ color: "rgb(var(--muted))" }}>
-        {label}
-      </div>
-      <div className="break-words">{value || "—"}</div>
-    </div>
-  );
-}
-
-function toneFromStatus(status: string): "bad" | "warn" | "good" | "neutral" {
+function toneFromStatus(status: string): Tone {
   const v = status.toLowerCase();
   if (v.includes("fail") || v.includes("error")) return "bad";
   if (v.includes("transfer")) return "warn";
@@ -29,56 +20,59 @@ function toneFromStatus(status: string): "bad" | "warn" | "good" | "neutral" {
   return "neutral";
 }
 
+function fmtTs(v: string): string {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
 export function CallMetaCard({ call }: { call: CallLike }) {
   const callSid = s(call.call_sid) || s(call.callSid) || s(call.sid) || s(call.id);
+  const startedAt = fmtTs(s(call.started_at) || s(call.created_at) || s(call.createdAt) || s(call.timestamp));
+  const endedAt = fmtTs(s(call.ended_at) || s(call.endedAt));
+  const durationRaw = s(call.duration_seconds) || s(call.durationSeconds) || s(call.duration);
+  const status = s(call.status);
+  const intent = s(call.intent);
+  const patientName = s(call.patient_name);
+  const sentiment = s(call.sentiment);
+  const sentimentScore = s(call.sentiment_score);
+  const from = s(call.from_number);
+  const to = s(call.to_number);
 
-  const startedAt = s(call.started_at) || s(call.created_at) || s(call.createdAt) || s(call.timestamp) || "—";
-  const endedAt = s(call.ended_at) || s(call.endedAt) || "—";
-  const duration = s(call.duration_seconds) || s(call.durationSeconds) || s(call.duration) || "—";
-
-  const status = s(call.status) || "—";
-  const intent = s(call.intent) || "—";
-
-  const patientName = s(call.patient_name) || "—";
-  const sentiment = s(call.sentiment) || "—";
-  const sentimentScore = s(call.sentiment_score) || "—";
-
-  const from = s(call.from_number) || "—";
-  const to = s(call.to_number) || "—";
-
-  const wasTransferred = String(call.was_transferred ?? "").toLowerCase() === "true" ? "Yes" : String(call.was_transferred ?? "") === "false" ? "No" : s(call.was_transferred) || "—";
-  const transferReason = s(call.transfer_reason) || "—";
-  const errorMessage = s(call.error_message) || "—";
+  const transferredRaw = String(call.was_transferred ?? "").toLowerCase();
+  const wasTransferred =
+    transferredRaw === "true" ? "Yes" : transferredRaw === "false" ? "No" : s(call.was_transferred);
+  const transferReason = s(call.transfer_reason);
+  const errorMessage = s(call.error_message);
 
   return (
-    <Card className="p-4">
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {field("CallSid", callSid || "—")}
-        {field("Patient", patientName)}
-        {field("Intent", intent)}
-
-        <div className="text-sm">
-          <div className="text-xs mb-1" style={{ color: "rgb(var(--muted))" }}>
-            Status
-          </div>
-          <div>
-            <Badge text={status || "—"} tone={toneFromStatus(status)} />
-          </div>
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <PhoneIcon size={18} className="opacity-60" />
+          <h2 className="font-semibold">Call overview</h2>
         </div>
-
-        {field("Started", startedAt)}
-        {field("Ended", endedAt)}
-        {field("Duration", duration === "—" ? "—" : `${duration}s`)}
-
-        {field("From", from)}
-        {field("To", to)}
-
-        {field("Sentiment", sentiment)}
-        {field("Sentiment score", sentimentScore)}
-        {field("Transferred", wasTransferred)}
-        {field("Transfer reason", transferReason)}
-        {field("Error", errorMessage)}
+        {status ? <StatusPill value={status} tone={toneFromStatus(status)} /> : null}
       </div>
+
+      <FieldGrid cols={4}>
+        <Field label="Patient" value={patientName} />
+        <Field label="Intent" value={intent} />
+        <Field label="From" value={from} mono />
+        <Field label="To" value={to} mono />
+        <Field label="Started" value={startedAt} />
+        <Field label="Ended" value={endedAt} />
+        <Field label="Duration" value={durationRaw ? `${durationRaw}s` : null} />
+        <Field label="Transferred" value={wasTransferred} />
+        <Field label="Sentiment" value={sentiment} />
+        <Field label="Sentiment score" value={sentimentScore} />
+        <Field label="Transfer reason" value={transferReason} className="lg:col-span-2" />
+        {errorMessage ? (
+          <Field label="Error" value={errorMessage} className="sm:col-span-2 lg:col-span-4" />
+        ) : null}
+        <Field label="Call SID" value={callSid} mono className="sm:col-span-2 lg:col-span-4" />
+      </FieldGrid>
     </Card>
   );
 }

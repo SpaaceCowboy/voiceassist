@@ -1,11 +1,13 @@
 // Path: components/calls/CallsPageClient.tsx
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRef } from "react";
 import { ErrorCard } from "@/components/ui/ErrorCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { PhoneIcon } from "@/components/ui/icons";
 import { useCallsStore } from "@/store/calls";
 import { CallsFiltersBar } from "./list/CallsFiltersBar";
 import { CallsTable } from "./list/CallsTable";
@@ -41,6 +43,7 @@ export default function CallsPageClient() {
     refresh,
   } = useCallsStore();
 
+  const [outcome, setOutcome] = useState("");
   const qDebounced = useDebouncedValue(q, 200);
 
   const searchParams = useSearchParams();
@@ -61,30 +64,51 @@ useEffect(() => {
 
   const filteredRows = useMemo(() => {
     const t = qDebounced.trim();
-        if (!t) return rows;
-    return rows.filter((c) => includesQuery(callSearchParts(c), t));
-  }, [qDebounced, rows]);
+    return rows.filter((c) => {
+      if (t && !includesQuery(callSearchParts(c), t)) return false;
+      if (outcome) {
+        const o = (s(c.outcome) || s(c.result) || s(c.status)).toLowerCase();
+        if (!o.includes(outcome)) return false;
+      }
+      return true;
+    });
+  }, [qDebounced, rows, outcome]);
 
-  const hasPrev = offset > 0;
-  const hasNext = offset + limit < count;
+  // Client-side filtering only sees the current page, so pause server pagination
+  // while a filter is active to avoid misleading "Next" jumps.
+  const paused = qDebounced.trim().length > 0 || outcome.length > 0;
+  const hasPrev = offset > 0 && !paused;
+  const hasNext = offset + limit < count && !paused;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Calls</h1>
-        <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-          Call logs, outcomes, and transcripts.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={<PhoneIcon />}
+        title="Calls"
+        subtitle="Call logs, outcomes, and transcripts."
+        badge={
+          !loading ? (
+            <span
+              className="rounded-full border px-2.5 py-1 text-xs"
+              style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+            >
+              {count} total
+            </span>
+          ) : null
+        }
+      />
 
       <CallsFiltersBar
         q={q}
         setQ={setQuery}
+        outcome={outcome}
+        setOutcome={setOutcome}
         limit={limit}
         setLimit={setLimit}
         offset={offset}
         hasPrev={hasPrev}
         hasNext={hasNext}
+        paused={paused}
         onPrev={() => setOffset(offset - limit)}
         onNext={() => setOffset(offset + limit)}
         onRefresh={refresh}

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BASE = process.env.BACKEND_BASE_URL?.replace(/\/$/, "");
+// In docker-compose this is set to http://backend:3000. For local `npm run dev`
+// it falls back to the backend's published host port (see docker-compose.yml: 4001->3000).
+const BASE =
+  (process.env.BACKEND_BASE_URL || "http://localhost:4001").replace(/\/$/, "");
 const TOKEN_COOKIE = "auth-token";
 
 const PUBLIC_PROXY_ROUTES = new Set([

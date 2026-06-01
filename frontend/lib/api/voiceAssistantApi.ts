@@ -106,25 +106,30 @@ export const getCall = (callSid: string) =>
     `/api/calls/${callSid}`,
   );
 
-// Analytics
-export const getAnalyticsOverview = () =>
+// Analytics — all endpoints accept optional start_date/end_date (YYYY-MM-DD).
+export type DateRange = { start_date?: string; end_date?: string };
+
+const rangeQuery = (r?: DateRange) =>
+  toQuery({ start_date: r?.start_date, end_date: r?.end_date });
+
+export const getAnalyticsOverview = (range?: DateRange) =>
   backendGet<{ success: boolean; data: IntentAnalytics }>(
-    `/api/analytics/overview`,
+    `/api/analytics/overview${rangeQuery(range)}`,
   );
 
-export const getIntentAnalytics = () =>
+export const getIntentAnalytics = (range?: DateRange) =>
   backendGet<{ success: boolean; data: IntentAnalytics[] }>(
-    `/api/analytics/intents`,
+    `/api/analytics/intents${rangeQuery(range)}`,
   );
 
-export const getHourlyAnalytics = () =>
+export const getHourlyAnalytics = (range?: DateRange) =>
   backendGet<{ success: boolean; data: HourlyAnalytics[] }>(
-    `/api/analytics/hourly`,
+    `/api/analytics/hourly${rangeQuery(range)}`,
   );
 
-export const getAnalyticsMetrics = () =>
+export const getAnalyticsMetrics = (range?: DateRange) =>
   backendGet<{ success: boolean; data: AggregateMetrics }>(
-    `/api/analytics/metrics`,
+    `/api/analytics/metrics${rangeQuery(range)}`,
   );
 
 // FAQs

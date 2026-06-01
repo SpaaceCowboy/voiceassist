@@ -1,81 +1,88 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { backendGet } from "@/lib/backend";
 import { GlobalSearch } from "@/components/dashboard/GlobalSearch";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { KpiCard, SERIES_COLORS } from "@/components/ui/charts";
+import { StatusPill } from "@/components/ui/StatusPill";
 import {
-  KpiCard,
-  ChartCard,
-  BarList,
-  HourBars,
-  Donut,
-  StatRing,
-  SERIES_COLORS,
-  type DonutSegment,
-} from "@/components/ui/charts";
-import {
+  HomeIcon,
   PhoneIcon,
   CalendarIcon,
   TransferIcon,
   AlertIcon,
-  ClockIcon,
-  CheckCircleIcon,
+  HeartPulseIcon,
+  ChartIcon,
+  HelpIcon,
+  LayersIcon,
+  ActivityIcon,
+  UsersIcon,
 } from "@/components/ui/icons";
-import { toNum, fmtInt, fmtDuration, fmtPercent, humanize } from "@/lib/format";
+import { toNum, fmtInt, fmtPercent } from "@/lib/format";
+import { todayISO } from "@/lib/appointments";
 
-type Envelope<T> = { success?: boolean; data?: T } | T;
-
-type OverviewData = {
-  period?: { start?: string; end?: string };
-  calls?: {
-    total_calls?: string | number;
-    completed_calls?: string | number;
-    avg_duration?: string | number;
-    transferred_calls?: string | number;
-    calls_with_errors?: string | number;
-  };
-  appointments?: {
-    total?: string | number;
-    scheduled?: string | number;
-    confirmed?: string | number;
-    completed?: string | number;
-    cancelled?: string | number;
-    no_shows?: string | number;
-    from_ai?: string | number;
-  };
-};
-
-type IntentRow = { intent?: string; count?: string | number; percentage?: string | number };
-type HourlyRow = { hour?: string | number; call_count?: string | number };
+type Envelope<T> = { success?: boolean; data?: T; count?: number } | T;
+type AnyObj = Record<string, unknown>;
 
 function unwrap<T>(res: Envelope<T>): T {
   return (res as { data?: T })?.data ?? (res as T);
 }
+function s(v: unknown): string {
+  if (typeof v === "string" && v.trim()) return v.trim();
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return "";
+}
+function pick(o: AnyObj, keys: string[]): string {
+  for (const k of keys) {
+    const v = s(o[k]);
+    if (v) return v;
+  }
+  return "";
+}
+function fmtClock(raw: string): string {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw.slice(0, 5);
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+type OverviewData = {
+  calls?: { total_calls?: string | number; completed_calls?: string | number; transferred_calls?: string | number; calls_with_errors?: string | number };
+  appointments?: { total?: string | number; from_ai?: string | number };
+};
+
+const SECTIONS = [
+  { href: "/appointments", label: "Appointments", desc: "Browse & update bookings", Icon: CalendarIcon },
+  { href: "/patients", label: "Patients", desc: "Profiles & history", Icon: HeartPulseIcon },
+  { href: "/calls", label: "Calls", desc: "Logs & transcripts", Icon: PhoneIcon },
+  { href: "/analytics", label: "Analytics", desc: "Trends & performance", Icon: ChartIcon },
+  { href: "/faqs", label: "FAQs", desc: "Assistant knowledge base", Icon: HelpIcon },
+  { href: "/sessions", label: "Sessions", desc: "Live sessions & cleanup", Icon: LayersIcon },
+  { href: "/status", label: "API Status", desc: "Endpoint health", Icon: ActivityIcon },
+  { href: "/users", label: "Users", desc: "Members & access", Icon: UsersIcon },
+] as const;
 
 export default function DashboardPage() {
   const [overview, setOverview] = useState<OverviewData>({});
-  const [intents, setIntents] = useState<IntentRow[]>([]);
-  const [hourly, setHourly] = useState<HourlyRow[]>([]);
+  const [recentCalls, setRecentCalls] = useState<AnyObj[]>([]);
+  const [todayAppts, setTodayAppts] = useState<AnyObj[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [o, i, h] = await Promise.all([
-        backendGet<Envelope<OverviewData>>("/api/analytics/overview").catch(
-          () => ({}) as Envelope<OverviewData>,
-        ),
-        backendGet<Envelope<IntentRow[]>>("/api/analytics/intents").catch(
-          () => ({ data: [] }) as Envelope<IntentRow[]>,
-        ),
-        backendGet<Envelope<HourlyRow[]>>("/api/analytics/hourly").catch(
-          () => ({ data: [] }) as Envelope<HourlyRow[]>,
-        ),
+      const [o, c, a] = await Promise.all([
+        backendGet<Envelope<OverviewData>>("/api/analytics/overview").catch(() => ({}) as Envelope<OverviewData>),
+        backendGet<Envelope<AnyObj[]>>("/api/calls?limit=6&offset=0").catch(() => ({ data: [] }) as Envelope<AnyObj[]>),
+        backendGet<Envelope<AnyObj[]>>(`/api/appointments?date=${todayISO()}&limit=6`).catch(() => ({ data: [] }) as Envelope<AnyObj[]>),
       ]);
       if (cancelled) return;
       setOverview(unwrap(o) ?? {});
-      setIntents(unwrap(i) ?? []);
-      setHourly(unwrap(h) ?? []);
+      setRecentCalls((unwrap(c) as AnyObj[]) ?? []);
+      setTodayAppts((unwrap(a) as AnyObj[]) ?? []);
       setLoading(false);
     })();
     return () => {
@@ -85,156 +92,164 @@ export default function DashboardPage() {
 
   const c = overview.calls ?? {};
   const a = overview.appointments ?? {};
-  const period = overview.period;
-
   const totalCalls = toNum(c.total_calls) ?? 0;
-  const completedCalls = toNum(c.completed_calls) ?? 0;
   const transfers = toNum(c.transferred_calls) ?? 0;
   const errors = toNum(c.calls_with_errors) ?? 0;
-  const completionRate = totalCalls > 0 ? (completedCalls / totalCalls) * 100 : 0;
-
-  const intentItems = intents
-    .map((r) => ({ label: humanize(r.intent), value: toNum(r.count) ?? 0, pct: toNum(r.percentage) }))
-    .filter((r) => r.value > 0)
-    .slice(0, 7)
-    .map((r) => ({
-      label: r.label,
-      value: r.value,
-      hint: `${r.value.toLocaleString()}${r.pct != null ? ` · ${fmtPercent(r.pct)}` : ""}`,
-    }));
-
-  const hourData = hourly.map((r) => ({
-    hour: toNum(r.hour) ?? 0,
-    value: toNum(r.call_count) ?? 0,
-  }));
-
-  // Appointment status composition
-  const apptSegments: DonutSegment[] = [
-    { label: "Scheduled", value: toNum(a.scheduled) ?? 0, color: SERIES_COLORS[1] },
-    { label: "Confirmed", value: toNum(a.confirmed) ?? 0, color: SERIES_COLORS[0] },
-    { label: "Completed", value: toNum(a.completed) ?? 0, color: SERIES_COLORS[2] },
-    { label: "Cancelled", value: toNum(a.cancelled) ?? 0, color: SERIES_COLORS[4] },
-    { label: "No-show", value: toNum(a.no_shows) ?? 0, color: SERIES_COLORS[3] },
-  ].filter((s) => s.value > 0);
-  const apptTotal = toNum(a.total) ?? apptSegments.reduce((s, x) => s + x.value, 0);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-sm" style={{ color: "rgb(var(--muted))" }}>
-            {period?.start && period?.end
-              ? `Activity from ${period.start} to ${period.end}`
-              : "Live snapshot from backend analytics."}
-          </p>
-        </div>
-        {!loading && (
-          <span
-            className="rounded-full border px-3 py-1 text-xs"
-            style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}
+      <PageHeader
+        icon={<HomeIcon />}
+        title="Dashboard"
+        subtitle="Search anything, jump to any section, and see what's happening right now."
+        actions={
+          <Link
+            href="/analytics"
+            className="inline-flex items-center gap-1 text-sm"
+            style={{ color: "rgb(var(--accent))" }}
           >
-            {fmtInt(totalCalls)} calls · {fmtInt(apptTotal)} appointments
-          </span>
-        )}
-      </div>
+            Full analytics →
+          </Link>
+        }
+      />
 
+      {/* Command search — the primary way to find anything */}
       <GlobalSearch />
 
-      {/* KPI row */}
+      {/* At-a-glance pulse (numbers only; deep charts live on Analytics) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard
-          label="Total calls"
-          value={fmtInt(c.total_calls)}
-          sub={`${fmtInt(completedCalls)} completed`}
-          icon={<PhoneIcon />}
-          color={SERIES_COLORS[0]}
-          loading={loading}
-        />
-        <KpiCard
-          label="Appointments"
-          value={fmtInt(a.total)}
-          sub={`${fmtInt(a.from_ai)} booked by AI`}
-          icon={<CalendarIcon />}
-          color={SERIES_COLORS[1]}
-          loading={loading}
-        />
-        <KpiCard
-          label="Transfers"
-          value={fmtInt(c.transferred_calls)}
-          sub={totalCalls > 0 ? `${fmtPercent((transfers / totalCalls) * 100)} of calls` : undefined}
-          icon={<TransferIcon />}
-          color={SERIES_COLORS[3]}
-          loading={loading}
-        />
-        <KpiCard
-          label="Errors"
-          value={fmtInt(c.calls_with_errors)}
-          sub={errors === 0 ? "All clear" : "Needs attention"}
-          icon={<AlertIcon />}
-          color={errors > 0 ? SERIES_COLORS[4] : SERIES_COLORS[2]}
-          loading={loading}
-        />
+        <KpiCard label="Total calls" value={fmtInt(c.total_calls)} sub={`${fmtInt(c.completed_calls)} completed`} icon={<PhoneIcon />} color={SERIES_COLORS[0]} loading={loading} />
+        <KpiCard label="Appointments" value={fmtInt(a.total)} sub={`${fmtInt(a.from_ai)} booked by AI`} icon={<CalendarIcon />} color={SERIES_COLORS[1]} loading={loading} />
+        <KpiCard label="Transfers" value={fmtInt(c.transferred_calls)} sub={totalCalls > 0 ? `${fmtPercent((transfers / totalCalls) * 100)} of calls` : undefined} icon={<TransferIcon />} color={SERIES_COLORS[3]} loading={loading} />
+        <KpiCard label="Errors" value={fmtInt(c.calls_with_errors)} sub={errors === 0 ? "All clear" : "Needs attention"} icon={<AlertIcon />} color={errors > 0 ? SERIES_COLORS[4] : SERIES_COLORS[2]} loading={loading} />
       </div>
 
-      {/* Secondary row: completion ring + avg duration */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="Call completion" subtitle="Completed vs. total handled">
-          <div className="flex items-center justify-around py-1">
-            <StatRing
-              percent={completionRate}
-              caption="completed"
-              color={SERIES_COLORS[2]}
-            />
-            <div className="space-y-3 text-sm">
-              <div>
-                <div className="text-2xl font-semibold tabular-nums">{fmtInt(completedCalls)}</div>
-                <div style={{ color: "rgb(var(--muted))" }}>completed calls</div>
-              </div>
-              <div>
-                <div className="text-lg font-semibold tabular-nums">{fmtDuration(c.avg_duration)}</div>
-                <div style={{ color: "rgb(var(--muted))" }}>avg. duration</div>
-              </div>
-            </div>
-          </div>
-        </ChartCard>
-
-        <ChartCard
-          title="Appointment status"
-          subtitle="Where the schedule stands"
-          className="lg:col-span-2"
-        >
-          {apptSegments.length ? (
-            <Donut
-              segments={apptSegments}
-              centerLabel={{ value: fmtInt(apptTotal), caption: "total" }}
-            />
-          ) : (
-            <div className="py-8 text-center text-sm" style={{ color: "rgb(var(--muted))" }}>
-              No appointments in this window.
-            </div>
-          )}
-        </ChartCard>
+      {/* Quick access to every section */}
+      <div>
+        <div className="mb-2 text-xs font-medium uppercase tracking-wide" style={{ color: "rgb(var(--muted))" }}>
+          Quick access
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {SECTIONS.map(({ href, label, desc, Icon }) => (
+            <Link key={href} href={href} className="group">
+              <Card className="flex h-full items-start gap-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+                <span
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition group-hover:scale-105"
+                  style={{ background: "rgba(var(--accent),0.12)", color: "rgb(var(--accent))" }}
+                >
+                  <Icon size={20} />
+                </span>
+                <div className="min-w-0">
+                  <div className="font-medium">{label}</div>
+                  <div className="text-xs" style={{ color: "rgb(var(--muted))" }}>
+                    {desc}
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
 
-      {/* Charts row */}
+      {/* Recent activity */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <ChartCard
-          title="Top intents"
-          subtitle="What callers are asking for"
-          right={<CheckCircleIcon size={18} className="opacity-50" />}
-        >
-          <BarList items={intentItems} colorful emptyText="No intent data yet." />
-        </ChartCard>
-
-        <ChartCard
-          title="Busy hours"
-          subtitle="Call volume by hour of day"
-          right={<ClockIcon size={18} className="opacity-50" />}
-        >
-          <HourBars data={hourData} valueFormat={(v) => `${v} call${v === 1 ? "" : "s"}`} />
-        </ChartCard>
+        <RecentCard
+          title="Today's appointments"
+          href="/appointments"
+          loading={loading}
+          empty="No appointments scheduled today."
+          rows={todayAppts.map((o, i) => {
+            const id = pick(o, ["id", "appointment_id"]);
+            return {
+              key: id || pick(o, ["confirmation_code"]) || `appt-${i}`,
+              href: id ? `/appointments/${id}` : "/appointments",
+              left: pick(o, ["patient_name", "full_name"]) || "Unknown patient",
+              sub: [pick(o, ["department_name", "department"]), pick(o, ["doctor_name", "provider_name", "provider"])].filter(Boolean).join(" · "),
+              meta: fmtClock(pick(o, ["scheduled_time", "appointment_time"])),
+              status: pick(o, ["status"]),
+            };
+          })}
+        />
+        <RecentCard
+          title="Recent calls"
+          href="/calls"
+          loading={loading}
+          empty="No calls logged yet."
+          rows={recentCalls.map((o, i) => {
+            const sid = pick(o, ["callSid", "call_sid", "sid", "id"]);
+            return {
+              key: sid || `call-${i}`,
+              href: sid ? `/calls/${sid}` : "/calls",
+              left: pick(o, ["patient_name"]) || (sid ? `Call ${sid.slice(0, 6)}` : "Call"),
+              sub: pick(o, ["intent", "problem"]),
+              meta: fmtClock(pick(o, ["created_at", "started_at", "timestamp"])),
+              status: pick(o, ["outcome", "status"]),
+            };
+          })}
+        />
       </div>
     </div>
+  );
+}
+
+type RecentRow = { key: string; href: string; left: string; sub: string; meta: string; status: string };
+
+function RecentCard({
+  title,
+  href,
+  rows,
+  loading,
+  empty,
+}: {
+  title: string;
+  href: string;
+  rows: RecentRow[];
+  loading: boolean;
+  empty: string;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="font-semibold">{title}</div>
+        <Link href={href} className="text-xs" style={{ color: "rgb(var(--accent))" }}>
+          View all →
+        </Link>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-12 animate-pulse rounded-xl bg-black/5 dark:bg-white/10" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed py-8 text-center text-sm" style={{ borderColor: "rgb(var(--border))", color: "rgb(var(--muted))" }}>
+          {empty}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((r) => (
+            <Link
+              key={r.key}
+              href={r.href}
+              className="flex items-center gap-3 rounded-xl border p-2.5 transition hover:bg-[rgb(var(--surface2))]"
+              style={{ borderColor: "rgb(var(--border))" }}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{r.left}</div>
+                {r.sub ? (
+                  <div className="truncate text-xs" style={{ color: "rgb(var(--muted))" }}>
+                    {r.sub}
+                  </div>
+                ) : null}
+              </div>
+              <div className="text-xs tabular-nums" style={{ color: "rgb(var(--muted))" }}>
+                {r.meta}
+              </div>
+              {r.status ? <StatusPill value={r.status} size="sm" /> : null}
+            </Link>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

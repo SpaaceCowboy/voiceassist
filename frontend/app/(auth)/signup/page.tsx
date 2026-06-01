@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { AuthBrand } from "@/components/auth/AuthBrand";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -52,13 +53,7 @@ export default function SignupPage() {
 
   return (
     <Card className="w-full max-w-sm p-6">
-      <h1 className="text-xl font-semibold mb-1">Create account</h1>
-      <p
-        className="text-sm mb-6"
-        style={{ color: "rgb(var(--muted))" }}
-      >
-        Sign up to access the dashboard.
-      </p>
+      <AuthBrand subtitle="Create your account" />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
