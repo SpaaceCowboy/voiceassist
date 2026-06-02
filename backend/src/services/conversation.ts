@@ -139,12 +139,27 @@ export async function generateGreeting(callSid: string): Promise<GreetingRespons
 }
 
 //process user input and generate a response
+// When onText is provided, assistant text is streamed out incrementally as
+// Claude generates it (so the route can start TTS on the first sentence). In
+// that mode the caller should NOT re-speak the returned `text` — it has already
+// been emitted through onText.
 export async function processInput(
   callSid: string,
   userInput: string,
+  onText?: (delta: string) => void,
 ): Promise<ConversationResponse> {
   const startTime = Date.now();
   logger.call(callSid, 'info', 'processing input', {input: userInput});
+
+  // Track whether any assistant text has been streamed this turn. Canned
+  // strings (goodbye, transfer, fallback) are only spoken if the model itself
+  // produced nothing, to avoid talking over its own words.
+  let emittedText = false;
+  const emit = (delta: string): void => {
+    if (!delta) return;
+    emittedText = true;
+    onText?.(delta);
+  };
 
   //get session
   const session = await redis.getSession(callSid);
@@ -170,7 +185,7 @@ export async function processInput(
   let workingHistory: Message[] = [...updatedSession.messageHistory];
 
   // call openai
-  const response = await llmService.chat(workingHistory, context);
+  const response = await llmService.chat(workingHistory, context, emit);
 
   let responseText = response.content || '';
   let shouldEnd = false;
@@ -192,6 +207,7 @@ export async function processInput(
     if (toolKey === lastToolKey) {
       logger.call(callSid, 'warn', 'Duplicate tool call detected, breaking loop', { name, round });
       responseText = "I'm sorry, I didn't quite catch that. Could you please repeat what you said?";
+      if (!emittedText) emit(responseText);
       break;
     }
     lastToolKey = toolKey;
@@ -257,11 +273,13 @@ export async function processInput(
 
     if (result.shouldEnd) {
       responseText = "Thank you for calling. Goodbye.";
+      if (!emittedText) emit(responseText);
       break;
     }
 
     if (result.shouldTransfer) {
       responseText = "Transferring you now. Please hold.";
+      if (!emittedText) emit(responseText);
       break;
     }
 
@@ -270,7 +288,8 @@ export async function processInput(
       name,
       result,
       id,
-      context
+      context,
+      emit
     );
 
     responseText = continueResponse.content || '';

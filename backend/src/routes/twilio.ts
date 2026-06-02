@@ -211,7 +211,11 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let transcriptQueue: string[] = [];
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
       let debounceBuffer = '';
-      const DEBOUNCE_MS = 1500;
+      // Wait this long for more speech before processing. Shorter when the
+      // utterance already ends in sentence-final punctuation (likely complete),
+      // longer otherwise to give trailing fragments time to arrive and merge.
+      const DEBOUNCE_MS = 800;
+      const DEBOUNCE_MS_COMPLETE = 300;
       const MAX_PENDING_FRAGMENT_CHARS = 240;
       const MAX_PENDING_FRAGMENT_AGE_MS = 8000;
       const MAX_DEBOUNCE_BUFFER_CHARS = 500;
@@ -294,6 +298,16 @@ export function setupMediaStreamWebSocket(server: Server): void {
               pendingFragmentStartedAt = 0;
             }
 
+            // Barge-in: a real utterance arrived while the assistant is talking
+            // (or generating). Stop playback immediately so we don't talk over
+            // the caller. The interim handler catches most cases earlier; this
+            // covers finals that arrive without a qualifying interim.
+            if (isSpeaking && streamSid) {
+              ws.send(JSON.stringify({ event: 'clear', streamSid }));
+              isSpeaking = false;
+              logger.call(callSid, 'debug', 'Barge-in (final): cleared audio', { text: fullText });
+            }
+
             if (isProcessing) {
               if (debounceTimer) {
                 clearTimeout(debounceTimer);
@@ -324,6 +338,9 @@ export function setupMediaStreamWebSocket(server: Server): void {
                 return;
               }
               if (debounceTimer) clearTimeout(debounceTimer);
+              const delay = /[.!?]$/.test(debounceBuffer.trim())
+                ? DEBOUNCE_MS_COMPLETE
+                : DEBOUNCE_MS;
               debounceTimer = setTimeout(() => {
                 const merged = debounceBuffer;
                 debounceBuffer = '';
@@ -333,7 +350,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
                   queueTranscript(merged);
                   drainQueue();
                 }
-              }, DEBOUNCE_MS);
+              }, delay);
             }
           },
           onInterim: (text: string) => {
@@ -389,16 +406,26 @@ export function setupMediaStreamWebSocket(server: Server): void {
         }
 
         try {
-          const response = await conversationService.processInput(callSid, input);
+          // Stream assistant text into TTS sentence-by-sentence. Mark speaking
+          // up front so a barge-in during generation/playback can interrupt.
+          isSpeaking = true;
+          const speaker = streamSid
+            ? createSentenceSpeaker(ws, streamSid, callSid, () => !callEnded && isSpeaking)
+            : null;
+
+          const response = await conversationService.processInput(
+            callSid,
+            input,
+            speaker ? (delta) => speaker.push(delta) : undefined,
+          );
 
           if (callEnded) {
             logger.call(callSid, 'debug', 'Call ended during processing, skipping response');
             return;
           }
 
-          if (response.text && streamSid) {
-            isSpeaking = true;
-            await streamTTSResponse(ws, streamSid, response.text, callSid, () => !callEnded);
+          if (speaker) {
+            await speaker.done();
           }
 
           if (response.shouldEnd && callSid) {
@@ -532,7 +559,8 @@ export function setupMediaStreamWebSocket(server: Server): void {
 async function sendAudioResponse(
   ws: WebSocket,
   streamSid: string,
-  audioBuffer: Buffer
+  audioBuffer: Buffer,
+  sendMark: boolean = true,
 ): Promise<void> {
   const CHUNK_SIZE = 160;
 
@@ -548,7 +576,80 @@ async function sendAudioResponse(
     ws.send(JSON.stringify(message));
   }
 
-  ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'playback_done' } }));
+  if (sendMark) {
+    ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'playback_done' } }));
+  }
+}
+
+// Speaks assistant text as it streams in from the LLM. Sentences are detected
+// incrementally; TTS for each sentence is kicked off the moment the sentence
+// completes (so generation overlaps), but audio is sent to Twilio strictly in
+// order via a sequential chain. This lets the first sentence start playing
+// while the rest of the response is still being generated.
+function createSentenceSpeaker(
+  ws: WebSocket,
+  streamSid: string,
+  callSid: string,
+  isActive: () => boolean,
+) {
+  let buffer = '';
+  let sendChain: Promise<void> = Promise.resolve();
+  let sentenceCount = 0;
+  const startTime = Date.now();
+
+  function speak(rawSentence: string): void {
+    const sentence = rawSentence.trim();
+    if (!sentence) return;
+    sentenceCount += 1;
+
+    // Start generating immediately so chunks render in parallel.
+    const ttsPromise = ttsService
+      .textToSpeech(sentence)
+      .catch((error) => {
+        logger.call(callSid, 'error', 'TTS chunk failed', { sentence, error });
+        return null;
+      });
+
+    // But send strictly in order.
+    sendChain = sendChain.then(async () => {
+      if (!isActive()) return;
+      const audio = await ttsPromise;
+      if (audio && isActive()) {
+        await sendAudioResponse(ws, streamSid, audio, false);
+      }
+    });
+  }
+
+  return {
+    push(delta: string): void {
+      buffer += delta;
+      // Flush every complete sentence (ends with . ! or ?).
+      let boundary: number;
+      while ((boundary = buffer.search(/[.!?]/)) !== -1) {
+        const sentence = buffer.slice(0, boundary + 1);
+        buffer = buffer.slice(boundary + 1);
+        speak(sentence);
+      }
+    },
+    async done(): Promise<void> {
+      if (buffer.trim()) {
+        speak(buffer);
+        buffer = '';
+      }
+      await sendChain;
+      if (isActive()) {
+        ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'playback_done' } }));
+      }
+      const duration = Date.now() - startTime;
+      logger.call(callSid, 'info', 'Streaming TTS complete', {
+        duration: `${duration}ms`,
+        chunks: sentenceCount,
+      });
+      if (sentenceCount > 0) {
+        redis.incrementTtsChunks(callSid, sentenceCount).catch(() => {});
+      }
+    },
+  };
 }
 
 // Split text into sentences, generate TTS per-sentence, and stream each

@@ -2,6 +2,18 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-02 — Response latency overhaul
+
+Driven by analysis of two real test calls (~3.6–4s end-of-speech → first-audio). Attacks the serial debounce → Claude → TTS pipeline.
+
+- **Claude → TTS token streaming** — `backend/src/services/llm.ts`, `backend/src/services/conversation.ts`, `backend/src/routes/twilio.ts`. `chat`/`continueAfterFunctionCall` now accept an optional `onTextDelta` and use `anthropic.messages.stream()`. `processInput` threads an `onText` callback (and emits canned goodbye/transfer/fallback strings through it when the model produced no text of its own). The route's new `createSentenceSpeaker` detects sentences in the delta stream, kicks off TTS per sentence immediately (parallel generation) but sends audio strictly in order — so the first sentence plays while the rest is still generating, instead of waiting for the full completion.
+- **Anthropic prompt caching** — `backend/src/services/llm.ts`, `backend/src/functions/tools.ts`. Tool definitions and the static portion of the system prompt are marked with `cache_control: ephemeral`. System prompt split into `SYSTEM_PROMPT_STATIC` (cacheable) + a per-call dynamic context block via new `getSystemPromptBlocks`; the last tool carries a cache breakpoint. Cuts repeated input-token processing every turn (and every tool-loop hop).
+- **Adaptive debounce** — `backend/src/routes/twilio.ts`. Lowered base debounce 1500ms → 800ms, and 300ms when the buffered utterance already ends in sentence-final punctuation (likely complete). Removes most of the fixed dead-air on idle turns while still merging split STT fragments.
+- **Barge-in on final transcripts** — `backend/src/routes/twilio.ts`. A qualifying final transcript arriving while the assistant is speaking now sends a `clear` event and stops playback, covering finals that arrive without a qualifying interim. Speaking state is set up front so a barge-in can interrupt mid-generation too.
+- **Tighter responses + abuse handling** — `backend/src/functions/tools.ts`. System prompt now targets one sentence (two max), one question at a time, and adds a rule to stay professional / never repeat profanity / offer transfer on continued abuse.
+
+Verified: `cd backend && npm run typecheck`; `cd backend && npm run build`. Live Twilio call testing still needed (streaming audio ordering, barge-in timing).
+
 ## 2026-06-02 — Patients page lists all patients on load (frontend-only)
 
 The Patients page was blank on arrival because it never called the API until you typed — the backend `/api/patients/search` rejects an empty `q` with a 400. Rather than reintroduce the `GET /api/patients` browse route (removed 2026-05-31 under the frontend-only mandate), this lists everyone with **no backend change**: when the search box is empty the store now sends `q="%"`. The backend builds its filter as `ILIKE '%<q>%'` without escaping wildcards, so `"%"` becomes `"%%%"` and matches every patient. Verified live against the running stack: `?q=%` returns all 20 seeded patients (200); typed searches still work. Frontend `tsc --noEmit` clean.
