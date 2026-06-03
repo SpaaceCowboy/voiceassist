@@ -2,6 +2,47 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-03 — Landing: metrics band → bento dashboard + scroll-perf pass
+
+**Creative redesign of the metrics band.** The previous version (a uniform 2×3 grid of icon tiles) read as too plain. Replaced it with a **bento-style results dashboard** (new `frontend/components/landing/MetricsBand.tsx`) mixing tile sizes and three kinds of micro-visualisation, the pattern premium product sites use for a numbers section: a wide **hero card** (1,247 calls) with a gradient figure + an animated 7-bar weekly chart, two **radial progress rings** for the percentages (94.2% / 38%) whose arc fills in sync with the count-up, two compact stat cards, and a wide **after-hours card** (312) with an animated SVG **sparkline** (`pathLength`-normalised stroke-draw). Every card carries an emerald **trend delta** (↑/↓ vs last week) and lifts on hover. All charts animate in on scroll via the existing IntersectionObserver `active` flag + count-up hook, and are neutralised under `prefers-reduced-motion`.
+
+**Scroll smoothness.** Addressed jank from the classic compositor offenders: the nav's `backdrop-filter` blur (trimmed 12→10px and isolated onto its own layer with `translateZ(0)` so it no longer forces a full-page repaint while scrolling), the fixed `body::before` ambient gradient (promoted to its own layer), and the hero's `blur-3xl` glow (layer-isolated). Also **gated the hero `DashboardFrame`'s infinite typewriter + waveform loops** behind an IntersectionObserver so they pause when scrolled out of view, freeing the main thread for the rest of the page. (Note: `next dev` in Docker is inherently jankier than a production build — a `next build` will be smoother still.)
+
+- **`frontend/components/landing/MetricsBand.tsx`** (new) — the bento band: `HeroCard`/`Ring`/`CompactCard`/`WideCard` + `BarChart`/`Sparkline`/`Trend`/`IconPill`/`Tile` helpers.
+- **`frontend/components/landing/Landing.tsx`** — imports `MetricsBand`; removed the old inline band; nav blur isolated + transition narrowed; hero glow layer-isolated; pruned now-unused imports.
+- **`frontend/components/landing/DashboardFrame.tsx`** — visibility-gated `active` (IntersectionObserver) pauses the typewriter + waveform off-screen.
+- **`frontend/app/globals.css`** — `body::before` promoted to its own compositor layer.
+
+## 2026-06-03 — Landing: metrics band redesign + real feature mock-ups + polish
+
+Reworked the two weakest sections flagged from screenshots. **Metrics band** (`MetricsBand`): was a flat slab with six stats crammed in one row (numbers like "11.4 hrs" / "2m 14s" wrapping unevenly) floating above dead space. Rebuilt as a structured card — a live-context header ("The week your front desk just had · Across 40+ pilot clinics · last 7 days"), a soft accent radial wash, and a balanced **2×3 grid of inset tiles**, each with its own accent glyph (phone/bolt/transfer/clock/activity/moon), a `whitespace-nowrap` count-up number, and a label. Tiles lift + the glyph scales on hover; count-up-on-scroll preserved. **Feature deep-dive** ("Everything the assistant does, in plain sight"): the previews were deliberate but empty-looking grey **skeleton** placeholders. Replaced with four **real, feature-specific mini-UIs** built from existing seed data — a live-call card (animated waveform + transcript + "Booked" chip), a scheduling day-strip with an availability/booked slot list, a recognised-patient profile card, and an FAQ chat (question → answer bubble + "Resolved · no transfer"). Cards lift on hover. Added an `equalize` keyframe for the CSS waveform.
+
+Verified: frontend `tsc --noEmit` clean · `eslint` clean (only pre-existing warnings) · live page returns 200 and renders with the changes.
+
+- **`frontend/components/landing/FeatureMocks.tsx`** (new) — `FeatureMock` switchboard + the four feature mock-ups (`CallsMock`/`SchedulingMock`/`PatientsMock`/`FaqMock`), `MiniWave`, `Tile`, `Chip` helpers.
+- **`frontend/components/landing/Landing.tsx`** — redesigned `MetricItem`/`MetricsBand` (icon tiles, header, glow), removed the old skeleton `FeaturePreview`, `FeatureDeepDive` now renders `FeatureMock`; imported the metric glyphs.
+- **`frontend/tailwind.config.js`** — added the `equalize` keyframe + `animate-equalize` utility.
+
+## 2026-06-03 — Claymorphism landing page rebuilt (light + dark, real seed data)
+
+Full rework of the `/` landing page to a brief-grade standard, replacing the first-pass version. Starts from a documented token extraction (`design-tokens.md`) and a `landing-plan.md`. Key fixes over the first pass: a **tuned (not maximal) Claymorphism recipe** re-derived for the dashboard's cool/violet palette, with a **correct dark mode** (surface lifted above the page bg, faint 0.05 top highlight, stronger underside, light-catching rim) implemented as CSS vars that flip on `.dark` — never inverted. One accent (violet) site-wide; category tints confined to the simulated dashboard frame only. Eleven sections with **real copy + seed data, zero placeholders** (Sarah Chen / Marcus Reyes …, metrics 1,247 · 94.2% · 312 …, the Dr. Patel reschedule transcript, regional clinic logos). Hero ships a cohesive **DashboardFrame** (live-call waveform, typing transcript, count-up metrics, recent callers). Motion via **GSAP + ScrollTrigger**: hero entrance timeline, scroll reveals, **magnetic + press-squish** primary CTA, card-hover lift, metric **count-up on scroll-in**, 2 idle-float blobs — all wrapped in `gsap.matchMedia` with a complete reduced-motion fallback (no loops, count-ups show finals). Also **loaded Inter + JetBrains Mono via `next/font`** (they were named in tokens but never loaded) and exempted `/` from the auth middleware so the public page renders.
+
+Verified: `tsc --noEmit` clean · `eslint` clean · `next build` green with `/` **static** · prod-server smoke test returns **200** with all seed content in the SSR HTML.
+
+- **`design-tokens.md`, `landing-plan.md`** (repo root) — extracted token source-of-truth + masterpiece plan.
+- **`frontend/app/layout.tsx`** — `next/font` Inter + JetBrains Mono wired to `--font-inter` / `--font-jbmono`.
+- **`frontend/app/globals.css`** — retuned clay kit (`--clay-bg/-surface/-border/-shadow/-shadow-hover/-shadow-pressed`, light+dark) + font vars consume next/font; `.clay-press` baseline.
+- **`frontend/tailwind.config.js`** — `shadow-clay*`, `rounded-clay*`, `bg-clay-*` utilities.
+- **`frontend/middleware.ts`** — `/` added to the public allowlist (was redirecting to `/login`).
+- **`frontend/components/landing/`** — `Landing.tsx` (nav + 11 sections + GSAP), `DashboardFrame.tsx`, `primitives.tsx` (ClayCard/Pill/Button/Wordmark/ThemeButton/SectionHeading), `hooks.ts` (count-up, typewriter, reduced-motion, dark, scrolled), `data.ts`. Removed the first-pass `clay.ts` + `VoiceOrb.tsx`.
+
+- **`frontend/package.json`** — added `gsap` + `@gsap/react`.
+- **`frontend/app/page.tsx`** — replaced the login redirect with the `Landing` render + page metadata.
+- **`frontend/app/globals.css`** — added the Claymorphism utility kit (`.clay`, `.clay-sm`, `.clay-blob`, `.clay-press`) driven by `--clay-tint`/`--clay-hl`/`--clay-carve` CSS vars with light/dark variants.
+- **`frontend/tailwind.config.js`** — added clay border radii and ambient keyframes (`float`, `float-slow`, `ping-ring`, `shimmer`).
+- **`frontend/components/AppShell.tsx`** — `/` now renders full-bleed (bypasses the dashboard sidebar), alongside the existing auth routes.
+- **`frontend/components/landing/`** — new `Landing.tsx`, `VoiceOrb.tsx`, `clay.ts` (tint helper + brand palette).
+
 ## 2026-06-02 — Patients page lists all patients on load (frontend-only)
 
 The Patients page was blank on arrival because it never called the API until you typed — the backend `/api/patients/search` rejects an empty `q` with a 400. Rather than reintroduce the `GET /api/patients` browse route (removed 2026-05-31 under the frontend-only mandate), this lists everyone with **no backend change**: when the search box is empty the store now sends `q="%"`. The backend builds its filter as `ILIKE '%<q>%'` without escaping wildcards, so `"%"` becomes `"%%%"` and matches every patient. Verified live against the running stack: `?q=%` returns all 20 seeded patients (200); typed searches still work. Frontend `tsc --noEmit` clean.

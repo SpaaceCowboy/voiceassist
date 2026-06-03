@@ -29,11 +29,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const pathname = usePathname();
 
-  const isAuth =
+  // The marketing landing page and auth screens render full-bleed,
+  // without the dashboard sidebar chrome.
+  const isBare =
+    pathname === "/" ||
     pathname?.startsWith("/login") ||
     pathname?.startsWith("/signup");
 
-  if (isAuth) {
+  if (isBare) {
     return <>{children}</>;
   }
 

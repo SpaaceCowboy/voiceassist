@@ -3,6 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 const TOKEN_KEY = "auth-token";
 
 function isPublicPath(pathname: string) {
+  // public marketing landing page
+  if (pathname === "/") return true;
+
   // allow auth pages
   if (pathname.startsWith("/login") || pathname.startsWith("/signup")) return true;
 

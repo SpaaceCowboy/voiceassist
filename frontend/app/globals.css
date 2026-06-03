@@ -31,10 +31,12 @@
 
   --radius: 16px;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
-    Menlo, Consolas, "Liberation Mono", monospace;
+  /* next/font (layout.tsx) injects --font-inter / --font-jbmono; these stacks
+     fall back to the system equivalents if the webfont hasn't painted yet. */
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-jbmono), "JetBrains Mono", ui-monospace,
+    SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 html.dark {
@@ -84,6 +86,10 @@ body::before {
     rgba(var(--accent), 0.07),
     transparent 60%
   );
+  /* promote to its own compositor layer so a fixed gradient never
+     triggers a repaint as content scrolls over it */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* tabular figures for data so columns don't jitter */
@@ -136,6 +142,66 @@ textarea:focus-visible,
 }
 *::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--muted));
+}
+
+/* ============================================================
+   Claymorphism kit (landing) — tuned, premium soft UI.
+   Re-derived from the dashboard's cool/violet tokens. Dark mode is a
+   separate derivation (NOT an inversion): surface sits ABOVE the bg, the
+   top highlight is faint, the underside is stronger, plus a light-catching
+   rim. One Tailwind class per token (shadow-clay / rounded-clay / bg-clay-*)
+   adapts across modes with no per-mode markup. See design-tokens.md §6.
+   ============================================================ */
+:root {
+  --clay-bg: 237 239 243;            /* #EDEFF3 page bg — a touch below the surface */
+  --clay-surface: 252 253 254;       /* #FCFDFE matte near-white (not pure #FFF) */
+  --clay-border: rgba(16, 18, 27, 0.05);
+
+  --clay-radius-sm: 18px;
+  --clay-radius: 28px;
+  --clay-radius-lg: 36px;
+
+  --clay-shadow:
+    0 14px 30px -10px rgba(31, 41, 55, 0.12),   /* outer lift */
+    inset 0 2px 3px rgba(255, 255, 255, 0.90),  /* bright top highlight */
+    inset 0 -8px 14px -4px rgba(31, 41, 55, 0.06); /* underside curve */
+  --clay-shadow-hover:
+    0 22px 44px -12px rgba(31, 41, 55, 0.16),
+    inset 0 2px 3px rgba(255, 255, 255, 0.90),
+    inset 0 -8px 14px -4px rgba(31, 41, 55, 0.06);
+  --clay-shadow-pressed:                          /* flat: lift gone, inner bottom deepened */
+    0 2px 6px -2px rgba(31, 41, 55, 0.10),
+    inset 0 1px 2px rgba(255, 255, 255, 0.60),
+    inset 0 -2px 6px rgba(31, 41, 55, 0.12);
+}
+
+html.dark {
+  --clay-bg: 15 17 22;               /* #0F1116 — clearly below the surface */
+  --clay-surface: 28 31 38;          /* #1C1F26 — dashboard surface, LIFTED above bg */
+  --clay-border: rgba(255, 255, 255, 0.06); /* soft rim that catches light */
+
+  --clay-shadow:
+    0 18px 38px -12px rgba(0, 0, 0, 0.60),       /* outer depth on dark */
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),   /* FAINT top highlight */
+    inset 0 -8px 16px -4px rgba(0, 0, 0, 0.45);  /* STRONGER underside */
+  --clay-shadow-hover:
+    0 26px 52px -14px rgba(0, 0, 0, 0.66),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    inset 0 -8px 16px -4px rgba(0, 0, 0, 0.45);
+  --clay-shadow-pressed:
+    0 2px 8px -3px rgba(0, 0, 0, 0.50),
+    inset 0 1px 1px rgba(255, 255, 255, 0.04),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.50);
+}
+
+/* Baseline CSS press feedback (the JS layer adds the magnetic/scale polish).
+   Kept tiny so it survives even without GSAP; reduced-motion neutralises it. */
+.clay-press {
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.clay-press:active {
+  transform: scale(0.97);
+  box-shadow: var(--clay-shadow-pressed);
 }
 
 /* ---- motion preferences ----------------------------------- */

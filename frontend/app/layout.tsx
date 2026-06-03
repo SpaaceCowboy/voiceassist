@@ -1,5 +1,22 @@
 import "./globals.css";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
+
+// The design tokens have always *named* Inter / JetBrains Mono but never loaded
+// them; this makes the intended typography real across the whole app. The CSS
+// variables are consumed by --font-sans / --font-mono in globals.css.
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+  display: "swap",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-jbmono",
+  display: "swap",
+});
 
 export const metadata = {
   title: "NeuroSpine — Voice Assistant Dashboard",
@@ -12,7 +29,11 @@ const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t!==
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
