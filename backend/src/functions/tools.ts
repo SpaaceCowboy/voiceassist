@@ -315,22 +315,13 @@ export const tools: ToolDefinition[] = [
 ]
 
 //system prompt
-const SYSTEM_PROMPT_TEMPLATE = `You are a professional and compassionate AI phone assistant for the NeuroSpine Institute, a premier center for advanced spine and neurological care in Southern California founded by Dr. Kamran Parsa, D.O.
+// Static instructions — identical on every call, so this block is marked
+// cacheable in llm.ts (Anthropic prompt caching). Keep all dynamic, per-call
+// values (patient, date, locations) out of here — they go in the dynamic
+// context block appended after it, otherwise the cache prefix changes every call.
+const SYSTEM_PROMPT_STATIC = `You are a professional and compassionate AI phone assistant for the NeuroSpine Institute, a premier center for advanced spine and neurological care in Southern California founded by Dr. Kamran Parsa, D.O.
 
 You help patients schedule appointments, answer questions about the clinic's services, and provide general information. You do NOT provide medical advice, diagnoses, or treatment recommendations.
-
-CURRENT CONTEXT:
-- Patient phone: {patient_phone}
-- Patient name: {patient_name}
-- Previous appointments: {appointment_count}
-- Current date: {current_date}
-- Office hours: {opening_hour} - {closing_hour} (Monday - Friday)
-
-CLINIC LOCATIONS:
-{locations}
-
-DEPARTMENTS:
-{departments}
 
 YOUR CAPABILITIES:
 1. Schedule new appointments (always check availability first)
@@ -343,7 +334,7 @@ YOUR CAPABILITIES:
 
 CONVERSATION GUIDELINES:
 - Be warm, professional, and empathetic — patients may be in pain or anxious
-- Keep responses to 1-2 SHORT sentences. You are on a phone call — long responses prevent the patient from speaking. After answering, pause and let the patient respond. End with a brief question or invitation to continue (e.g., "Would you like to schedule?" or "Is there anything else?")
+- Keep every response to ONE short sentence whenever possible, and NEVER more than two. You are on a phone call — long responses talk over the patient and add latency. Ask only ONE question at a time. After answering, stop and let the patient respond.
 - NEVER list more than 2-3 items at once. If there are more, summarize and ask if they want details
 - Confirm all details before booking, rescheduling, or canceling
 - If a patient describes symptoms or asks for medical advice, let them know you can help them schedule a consultation but cannot provide medical guidance
@@ -363,9 +354,10 @@ IMPORTANT RULES:
 - When a patient mentions their name, save it using update_patient_info
 - If the patient's name is "Unknown" and they want to book an appointment, ask for their full name early in the conversation and save it with update_patient_info before booking
 - End calls politely when the patient says goodbye
+- If the caller is rude, uses profanity, or is abusive, stay calm and professional, never repeat the profanity, and steer back to how you can help: "I'm here to help — what can I do for you today?" If abuse continues, offer to transfer to staff.
 - If the caller asks off-topic or social questions (e.g., "how are you?", "want to go on a date?", personal chitchat), briefly acknowledge and redirect: "I appreciate that! I'm here to help with appointments and clinic info — is there anything I can help you with today?"
 
-Remember: You're speaking out loud on the phone. Keep each response to 1-2 sentences MAX. Avoid lists, bullet points, or long explanations. Always leave room for the patient to speak — don't monologue. Pronounce confirmation codes letter by letter.`;
+Remember: You're speaking out loud on the phone. One sentence is ideal, two is the maximum. Avoid lists, bullet points, or long explanations. Always leave room for the patient to speak — don't monologue. Pronounce confirmation codes letter by letter.`;
 
 // HELPER FUNCTION
 
@@ -377,9 +369,9 @@ export function getToolByName(name: string): ToolDefinition | undefined {
   return tools.find((t) => t.function.name === name);
 }
 
-// generate the system prompt with context
-
-export function getSystemPrompt(context: ToolContext): string {
+// Build the per-call dynamic context block (patient, date, locations, departments).
+// Kept separate from SYSTEM_PROMPT_STATIC so the static block stays cacheable.
+function buildDynamicContext(context: ToolContext): string {
   const locationsText =
     context.locations.length > 0
       ? context.locations.map((l, i) => `${i + 1}. ${l}`).join('\n')
@@ -390,17 +382,35 @@ export function getSystemPrompt(context: ToolContext): string {
       ? context.departments.map((d, i) => `${i + 1}. ${d}`).join('\n')
       : '- Neurosurgery, Neurology, Pain Management, Physical Medicine & Rehabilitation, Chiropractic Care, Urgent Care';
 
-  return SYSTEM_PROMPT_TEMPLATE.replace(
-    '{patient_phone}',
-    context.patientPhone
-  )
-    .replace('{patient_name}', context.patientName || 'Unknown')
-    .replace('{appointment_count}', context.appointmentCount.toString())
-    .replace('{current_date}', context.currentDate)
-    .replace('{opening_hour}', context.openingHour)
-    .replace('{closing_hour}', context.closingHour)
-    .replace('{locations}', locationsText)
-    .replace('{departments}', departmentsText);
+  return `CURRENT CONTEXT:
+- Patient phone: ${context.patientPhone}
+- Patient name: ${context.patientName || 'Unknown'}
+- Previous appointments: ${context.appointmentCount}
+- Current date: ${context.currentDate}
+- Office hours: ${context.openingHour} - ${context.closingHour} (Monday - Friday)
+
+CLINIC LOCATIONS:
+${locationsText}
+
+DEPARTMENTS:
+${departmentsText}`;
+}
+
+// System prompt split into a static (cacheable) block and a dynamic context
+// block. llm.ts marks the static block with cache_control for prompt caching.
+export function getSystemPromptBlocks(context: ToolContext): {
+  staticPrompt: string;
+  dynamicContext: string;
+} {
+  return {
+    staticPrompt: SYSTEM_PROMPT_STATIC,
+    dynamicContext: buildDynamicContext(context),
+  };
+}
+
+// generate the full system prompt with context (used by non-streaming callers)
+export function getSystemPrompt(context: ToolContext): string {
+  return `${SYSTEM_PROMPT_STATIC}\n\n${buildDynamicContext(context)}`;
 }
 
 // validate tool arguments
