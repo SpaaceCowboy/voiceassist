@@ -1,4 +1,5 @@
 import type {LogLevel} from '../../types/index'
+import { publishLog } from './logEvents'
 
 // --- Betterstack (Logtail) transport ---
 const LOGTAIL_TOKEN = process.env.LOGTAIL_TOKEN;
@@ -128,6 +129,7 @@ function log(level: LogLevel, message: string, data?: unknown): void {
 
   logToConsole(level, output);
   sendToBetterstack(level, message, data);
+  publishLog({ level, message, data });
 }
 
 function debug(message: string, data?: unknown): void {
@@ -166,6 +168,7 @@ function call(callSid: string, level: LogLevel, message: string, data?: unknown)
         ? { callSid, data }
         : { callSid };
   sendToBetterstack(level, message, bsData);
+  publishLog({ level, message, data, callSid });
 }
 
 function apiTiming(
@@ -191,13 +194,21 @@ function request(
   statusCode: number,
   durationMs: number
 ): void {
-  const statusColor = statusCode >= 500 
-    ? colors.red 
-    : statusCode >= 400 
-      ? colors.yellow 
+  if (!shouldLog('info')) return;
+
+  const statusColor = statusCode >= 500
+    ? colors.red
+    : statusCode >= 400
+      ? colors.yellow
       : colors.green;
-  
-  info(`${colors.cyan}${method}${colors.reset} ${path} ${statusColor}${statusCode}${colors.reset} ${durationMs}ms`);
+
+  // Console + Betterstack: keep the human-readable colored line.
+  const output = `${colors.dim}${formatTimestamp()}${colors.reset} ${levelIcons.info} ${colors.green}[INFO]${colors.reset} ${colors.cyan}${method}${colors.reset} ${path} ${statusColor}${statusCode}${colors.reset} ${durationMs}ms`;
+  logToConsole('info', output);
+  sendToBetterstack('info', `${method} ${path} ${statusCode} ${durationMs}ms`);
+
+  // Live feed: a clean, structured HTTP event (mapped in logEvents.ts).
+  publishLog({ level: 'info', message: '__http__', data: { method, path, statusCode, durationMs } });
 }
 
 const logger = {

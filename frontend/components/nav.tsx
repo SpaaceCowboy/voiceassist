@@ -16,6 +16,7 @@ import {
   LayersIcon,
   HelpIcon,
   ActivityIcon,
+  LogsIcon,
 } from "@/components/ui/icons";
 
 const NAV_SECTIONS = [
@@ -42,6 +43,7 @@ const NAV_SECTIONS = [
   {
     title: "System",
     items: [
+      { href: "/dashboard/logs", label: "Live Activity", Icon: LogsIcon },
       { href: "/sessions", label: "Sessions", Icon: LayersIcon },
       { href: "/status", label: "Status", Icon: ActivityIcon },
       { href: "/users", label: "Users", Icon: UsersIcon },

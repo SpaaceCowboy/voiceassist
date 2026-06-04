@@ -65,6 +65,9 @@ Shows how many assistant sessions are active/total and gives you a "cleanup" but
 Create new dashboard users (moderator only) and change your own password.
 - Limitation: there's **no list of existing users** yet, and you can't reset another person's password here.
 
+### 📡 Live Activity — `/dashboard/logs`
+A real-time feed of everything happening on the server — the backend terminal, but readable and prettier. It connects to a live stream (`GET /api/logs/stream`, SSE) and shows each event as it happens: incoming calls, **the actual conversation** (caller speech vs. assistant replies, threaded into a per-call card), tool calls, appointments **booked / rescheduled / cancelled** with full data (name · doctor · date · time), transfers, API requests, errors, and system health. Calls render as a **conversation card** (header with call ID · caller · outcome chip · time range, then caller/assistant speech bubbles and expandable tool/booking rows); standalone system/HTTP/error events render as single colour-coded lines. Up top is a health strip (Database / Redis / uptime / connection) with a live pulse. You can **search**, **filter** by level (info/success/warning/error) or source (call/appointment/assistant/session/system/tool), **pause/resume**, and the stream auto-scrolls (with a "↓ N new / jump to live" button). On connect it backfills recent history then tails live. If the stream is unreachable it automatically falls back to gentle polling of existing endpoints. *Search isolation:* the global dashboard search never surfaces these log events — they live only on this page. Full spec: `frontend/docs/LIVE_ACTIVITY_LOGS_SPEC.md`.
+
 ### 🩺 Status — `/status`
 A health check screen. It pings each backend endpoint and shows the status code, response time, and a preview of the reply — handy for spotting what's up or down.
 

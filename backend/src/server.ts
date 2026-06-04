@@ -18,7 +18,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
 import swaggerUi from 'swagger-ui-express';
-import { twilioRoutes, setupMediaStreamWebSocket, apiRoutes, authRoutes } from './routes';
+import { twilioRoutes, setupMediaStreamWebSocket, apiRoutes, authRoutes, logsRoutes } from './routes';
 import { validateTwilioWebhook, requestLogger } from './middleware';
 import database from './config/database';
 import redis from './config/redis';
@@ -121,7 +121,12 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req: Request) => req.path.startsWith('/twilio'),
+  // Exempt Twilio webhooks and the live-log SSE stream. The log stream is a
+  // single long-lived connection (plus the dashboard's gentle reconnects), so
+  // counting it against the 100-req/15-min budget would needlessly trip the
+  // limiter and 429 the whole dashboard.
+  skip: (req: Request) =>
+    req.path.startsWith('/twilio') || req.originalUrl.startsWith('/api/logs'),
 });
 
 app.use('/api', apiLimiter);
@@ -144,6 +149,10 @@ if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'tr
     res.json(swaggerSpec);
   });
 }
+
+// Live log stream (JWT-protected — see middleware inside logs.ts). Mounted
+// before the generic /api router and exempt from the rate limiter (above).
+app.use('/api/logs', logsRoutes);
 
 // API routes (JWT-protected — see middleware inside api.ts)
 app.use('/api', apiRoutes);

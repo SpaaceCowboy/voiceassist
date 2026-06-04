@@ -113,6 +113,20 @@ export const ActivityIcon = svg(
   <path d="M3 12h4l2.5 6 4-13L17 12h4" />,
 );
 export const ArrowLeftIcon = svg(<path d="M15 5l-7 7 7 7M8 12h12" />);
+export const ArrowDownIcon = svg(<path d="M12 5v14M5 12l7 7 7-7" />);
+export const PauseIcon = svg(
+  <>
+    <rect x="7" y="5" width="3.2" height="14" rx="1" />
+    <rect x="13.8" y="5" width="3.2" height="14" rx="1" />
+  </>,
+);
+export const PlayIcon = svg(<path d="M7 5l11 7-11 7V5Z" />);
+export const LogsIcon = svg(
+  <>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <path d="M7 9l2.5 2L7 13M11.5 13h5.5" />
+  </>,
+);
 export const RefreshIcon = svg(
   <>
     <path d="M20 11a8 8 0 0 0-14-4.5L4 8M4 4v4h4" />

@@ -2,6 +2,46 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-04 — Live Activity: real backend log-stream (SSE) + conversation-threaded UI + 429 fix
+
+Follow-up to the Live Activity page below. The owner wanted **everything** the backend terminal shows — every conversation turn, every assistant reply, every tool call, every appointment book/edit/cancel with full data (name/date/time/doctor) — on the frontend, prettier. Polling can't do that (the data isn't in the REST API, and it tripped the rate limiter). So, with explicit owner approval to touch the backend **for this feature**, added a real log-stream.
+
+**429 bug (root cause + fix).** The previous version polled 4 endpoints every 4s; the backend rate-limits **100 req / 15 min / IP** globally (`backend/src/server.ts`), so it tripped in ~100s and 429'd *every* page until the window reset. Fixed the polling fallback to be frugal (≤2 reads/tick, default 20s, health every 3rd tick, dropped sessions/stats), pause while the tab is hidden, and **hard-back-off on 429** with an explanatory banner. The real fix is SSE (one connection, exempt from the limiter).
+
+**Backend — new live log stream (SSE):**
+- `backend/src/utils/logEvents.ts` (new) — an in-process event bus + 200-event ring buffer. `publishLog()` maps each structured logger call to a `LiveEvent` (recognising `Transcript` → caller turn, `Assistant response` → AI turn, `Function call` → friendly tool/booking/cancel lines with args, HTTP requests, errors, health). Shape matches `frontend/lib/logs/types.ts` exactly.
+- `backend/src/utils/logger.ts` — `log()`, `call()` now also `publishLog(...)`; `request()` emits a clean structured `__http__` event (instead of an ANSI-colored line). Console + Betterstack behaviour unchanged.
+- `backend/src/routes/logs.ts` (new) — `GET /api/logs/stream` (SSE: backfills last 100, then live tail, 25s heartbeat) and `GET /api/logs/recent`. JWT-protected via existing `authenticate`.
+- `backend/src/server.ts` — mounts `/api/logs` and **exempts it from the rate limiter** (long-lived connection). `routes/index.ts` exports it.
+
+**Frontend — SSE-first + conversation UI:**
+- `lib/logs/sources.ts` — SSE is now the default feed (`SseLogSource`), auto-degrading to gentle polling if the stream can't open (7s handshake timeout). Mock feed rewritten to play full, realistic call scenarios (greeting → caller/AI turns → tool calls → book/reschedule/cancel/transfer → ended), threaded by callSid.
+- `lib/logs/group.ts` (new) + `components/logs/CallCard.tsx` (new) — consecutive same-call events render as a **threaded conversation card**: header (callSid · caller · outcome chip · time range) with caller/assistant speech bubbles and compact, expandable tool/booking/transfer rows. Non-call events still render as standalone `LogRow`s.
+- `lib/logs/types.ts` — added `role` ("user"|"assistant"|"tool"|"system").
+- `store/logs.ts` — slower default cadence (20s) + `statusDetail` for the rate-limit/reconnect banner.
+- Search isolation confirmed: `components/dashboard/GlobalSearch.tsx` only queries appointments/calls/patients/faqs — live-activity events live solely in the `logs` store and are never surfaced by global search. The page keeps its own local search.
+
+To go live: with the backend deployed, the frontend connects automatically (default). Override with `NEXT_PUBLIC_LOG_SOURCE=poll` or `=mock`. Full spec in `frontend/docs/LIVE_ACTIVITY_LOGS_SPEC.md`.
+
+Verified: backend `tsc` build clean; frontend `tsc --noEmit` + `eslint` clean. Not yet run live (needs Docker rebuild).
+
+## 2026-06-04 — Dashboard: Live Activity log page (`/dashboard/logs`)
+
+**New live server-activity page.** Added an operator-friendly real-time activity feed under **System → Live Activity** in the sidebar. Because the backend currently has **no log-stream endpoint** (logs go to stdout + Betterstack only — no `/api/logs`, no SSE, no audit table), the page is built **frontend-only**: it polls the existing JWT endpoints (`/api/calls`, `/api/appointments`, `/api/sessions/stats`, `/api/health`) on an interval, **diffs successive snapshots**, and synthesises human-readable events (Incoming call · Appointment booked · Call transferred · System healthy/degraded, etc.). The data layer is **SSE-ready**: a `createLogSource()` factory selects Polling (default), Mock (demo), or SSE feeds — flipping to a real backend stream later is a one-line `NEXT_PUBLIC_LOG_SOURCE=sse` switch (backend contract documented in `lib/logs/sources.ts`). See `pending-work.md` for the backend follow-up.
+
+**UX.** Colour-coded severity (info/success/warn/error) with a left accent bar, source chips (call/appointment/assistant/session/system) with icons, monospace timestamps, expandable rows (meta key/values + deep-link to the call/appointment), a live-pulse status badge, a DB/Redis/uptime **health strip**, search + level/source filter chips, pause/resume, a 2s/4s/8s poll-rate control, and a sticky auto-scroll stream with a "↓ N new / Jump to live" pill. First load backfills recent activity (flagged "past"), then streams new events live. Works in mock mode via a scripted demo feed so it's never empty.
+
+Verified: frontend `tsc --noEmit` clean · `eslint` clean on all new/changed files.
+
+- **`frontend/lib/logs/types.ts`** (new) — `LiveEvent`, `HealthSnapshot`, `Snapshot`, `LogSource`/handler interfaces.
+- **`frontend/lib/logs/deriveEvents.ts`** (new) — pure snapshot-diff engine (`deriveEvents` + `deriveHealthEvents`) with first-load backfill.
+- **`frontend/lib/logs/sources.ts`** (new) — `PollingLogSource` (working), `MockLogSource` (demo), `SseLogSource` (future), `createLogSource()` factory + defensive `/api/health` parsing.
+- **`frontend/store/logs.ts`** (new) — Zustand ring buffer (500), dedupe, filters, conn status, health, pause.
+- **`frontend/components/logs/`** (new) — `LogsPageClient`, `HealthStrip`, `LogControls`, `LogStream`, `LogRow`, `meta.tsx` (severity/source style map).
+- **`frontend/app/dashboard/logs/page.tsx` + `loading.tsx`** (new) — route + skeleton.
+- **`frontend/components/ui/icons.tsx`** — added `ArrowDownIcon`, `PauseIcon`, `PlayIcon`, `LogsIcon`.
+- **`frontend/components/nav.tsx`** — added "Live Activity" nav item under System.
+
 ## 2026-06-03 — Landing: metrics band → bento dashboard + scroll-perf pass
 
 **Creative redesign of the metrics band.** The previous version (a uniform 2×3 grid of icon tiles) read as too plain. Replaced it with a **bento-style results dashboard** (new `frontend/components/landing/MetricsBand.tsx`) mixing tile sizes and three kinds of micro-visualisation, the pattern premium product sites use for a numbers section: a wide **hero card** (1,247 calls) with a gradient figure + an animated 7-bar weekly chart, two **radial progress rings** for the percentages (94.2% / 38%) whose arc fills in sync with the count-up, two compact stat cards, and a wide **after-hours card** (312) with an animated SVG **sparkline** (`pathLength`-normalised stroke-draw). Every card carries an emerald **trend delta** (↑/↓ vs last week) and lifts on hover. All charts animate in on scroll via the existing IntersectionObserver `active` flag + count-up hook, and are neutralised under `prefers-reduced-motion`.
