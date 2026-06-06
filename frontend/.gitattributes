@@ -1,0 +1,5 @@
+# Git hooks and shell scripts must use LF endings so they run under `sh`
+# (husky on Linux/CI, and on a clean clone). Without this, autocrlf=true would
+# write CRLF and break hook execution with `\r` errors.
+.husky/** text eol=lf
+*.sh text eol=lf

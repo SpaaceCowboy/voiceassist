@@ -1,0 +1,8 @@
+echo "🔎 pre-push: type-checking frontend (tsc --noEmit) — same check Vercel runs…"
+npm run typecheck || {
+  echo ""
+  echo "❌ Type errors found. Push blocked so they don't reach Vercel."
+  echo "   Fix the errors above, or run 'npm run typecheck' to see them, then push again."
+  exit 1
+}
+echo "✅ Types clean — pushing."
