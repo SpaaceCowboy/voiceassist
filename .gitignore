@@ -22,6 +22,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 logs/
+# ...but `logs` directories under frontend/ are SOURCE CODE (the logs dashboard
+# feature: lib/logs, components/logs, app/dashboard/logs), not runtime output.
+# Without this, the broad `logs/` rule above silently excludes them from the
+# repo and Vercel fails with "Cannot find module '@/lib/logs/types'".
+!frontend/**/logs/
 
 # Test / coverage
 coverage/
