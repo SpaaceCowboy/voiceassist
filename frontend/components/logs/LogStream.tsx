@@ -57,13 +57,18 @@ export function LogStream({
 
   return (
     <div className="relative">
+      {/* Politely announce the size of the backlog instead of making the whole
+          log a live region (which would read out every row, flooding the user
+          on a 100-event backfill). */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {newCount > 0 ? `${newCount} new event${newCount === 1 ? "" : "s"}` : ""}
+      </div>
       <div
         ref={scrollRef}
         onScroll={onScroll}
         className="h-[calc(100vh-22rem)] min-h-[20rem] overflow-y-auto rounded-2xl border"
         style={{ background: "rgb(var(--surface))", borderColor: "rgb(var(--border))" }}
         role="log"
-        aria-live="polite"
         aria-label="Live activity stream"
       >
         {events.length === 0 ? (

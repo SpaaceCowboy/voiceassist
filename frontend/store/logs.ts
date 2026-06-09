@@ -9,6 +9,7 @@ import type {
   EventSource,
   HealthSnapshot,
   LiveEvent,
+  Transport,
 } from "@/lib/logs/types";
 
 /** Hard cap on retained events to keep memory + render cost bounded. */
@@ -20,6 +21,7 @@ type LogsState = {
   health: HealthSnapshot | null;
   status: ConnStatus;
   statusDetail: string | null;
+  transport: Transport;
   paused: boolean;
   pollMs: number;
 
@@ -32,6 +34,7 @@ type LogsState = {
   ingest: (incoming: LiveEvent[]) => void;
   setHealth: (h: HealthSnapshot) => void;
   setStatus: (s: ConnStatus, detail?: string) => void;
+  setTransport: (t: Transport) => void;
   setPaused: (v: boolean) => void;
   setPollMs: (ms: number) => void;
   setQuery: (q: string) => void;
@@ -51,6 +54,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
   health: null,
   status: "connecting",
   statusDetail: null,
+  transport: "sse",
   paused: false,
   pollMs: 20000,
 
@@ -80,6 +84,7 @@ export const useLogsStore = create<LogsState>((set, get) => ({
 
   setHealth: (h) => set({ health: h }),
   setStatus: (s, detail) => set({ status: s, statusDetail: detail ?? null }),
+  setTransport: (t) => set({ transport: t }),
   setPaused: (v) => set({ paused: v, status: v ? "paused" : "connecting", statusDetail: null }),
   setPollMs: (ms) => set({ pollMs: ms }),
 

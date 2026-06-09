@@ -121,6 +121,7 @@ class PollingLogSource implements LogSource {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.h.onTransport("polling");
     this.h.onStatus("connecting");
     void this.tick();
   }
@@ -186,7 +187,6 @@ class PollingLogSource implements LogSource {
     const snapshot: Snapshot = {
       calls: callsR.status === "fulfilled" ? asArray(callsR.value) : this.prev?.calls ?? [],
       appointments: apptR.status === "fulfilled" ? asArray(apptR.value) : this.prev?.appointments ?? [],
-      activeSessions: null,
     };
 
     const events = deriveEvents(this.prev, snapshot);
@@ -240,6 +240,7 @@ class MockLogSource implements LogSource {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.h.onTransport("mock");
     this.h.onStatus("connecting");
     const now = Date.now();
     // Small historical backlog so the page isn't empty on arrival.
@@ -409,6 +410,7 @@ class SseLogSource implements LogSource {
     this.es.onopen = () => {
       this.everOpened = true;
       if (this.connectTimer) clearTimeout(this.connectTimer);
+      this.h.onTransport("sse");
       this.h.onStatus("live");
     };
 
@@ -460,6 +462,10 @@ class SseLogSource implements LogSource {
     this.es = null;
     this.fallback?.stop();
     this.fallback = null;
+    // Reset so a later start() (e.g. resume after pause) is treated as a fresh
+    // connection: if it never opens, onerror degrades to polling rather than
+    // spinning in the "reconnecting" branch on a stream that's actually dead.
+    this.everOpened = false;
   }
 
   setPollMs(ms: number): void {

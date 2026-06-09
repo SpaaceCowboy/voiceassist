@@ -66,9 +66,19 @@ export function LogsPageClient() {
   const health = useLogsStore((s) => s.health);
   const paused = useLogsStore((s) => s.paused);
   const pollMs = useLogsStore((s) => s.pollMs);
+  const transport = useLogsStore((s) => s.transport);
   const query = useLogsStore((s) => s.query);
   const severities = useLogsStore((s) => s.severities);
   const sources = useLogsStore((s) => s.sources);
+
+  // SSE is the intended transport unless explicitly configured otherwise. If we
+  // end up on polling anyway, the live stream silently degraded — worth telling
+  // the operator, since polling is a much thinner feed (no conversation turns).
+  const sseIntended =
+    (process.env.NEXT_PUBLIC_LOG_SOURCE || "").toLowerCase() !== "poll" &&
+    (process.env.NEXT_PUBLIC_LOG_SOURCE || "").toLowerCase() !== "mock" &&
+    (process.env.NEXT_PUBLIC_DATA_SOURCE || "").toLowerCase() !== "mock";
+  const degraded = sseIntended && transport === "polling";
 
   const sourceRef = React.useRef<LogSource | null>(null);
 
@@ -81,6 +91,7 @@ export function LogsPageClient() {
         onEvents: (evs) => store().ingest(evs),
         onStatus: (s) => store().setStatus(s),
         onHealth: (h) => store().setHealth(h),
+        onTransport: (t) => store().setTransport(t),
       },
       store().pollMs,
     );
@@ -137,13 +148,35 @@ export function LogsPageClient() {
         </div>
       ) : null}
 
+      {degraded ? (
+        <div
+          className="flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
+          style={{
+            background: "rgba(245,158,11,0.08)",
+            borderColor: "rgba(245,158,11,0.30)",
+            color: "rgb(var(--text))",
+          }}
+          role="status"
+        >
+          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+          <span>
+            Live stream unavailable — falling back to polling every {Math.round(pollMs / 1000)}s.
+            Conversation turns and tool calls aren&apos;t available in this mode; only call and
+            booking summaries will appear.
+          </span>
+        </div>
+      ) : null}
+
       <LogControls />
 
       <LogStream events={filtered} totalCount={events.length} />
 
       <p className="px-1 text-[11px]" style={{ color: "rgb(var(--muted))" }}>
-        Live tail of server activity (SSE) — conversation turns, tool calls, bookings, requests and errors.
-        If the stream is unavailable it falls back to gentle polling every {Math.round(pollMs / 1000)}s.
+        {transport === "polling"
+          ? `Polling server activity every ${Math.round(pollMs / 1000)}s — call and booking summaries.`
+          : transport === "mock"
+            ? "Scripted demo stream — no live backend connected."
+            : "Live tail of server activity (SSE) — conversation turns, tool calls, bookings, requests and errors."}{" "}
         Showing {filtered.length.toLocaleString()} of {events.length.toLocaleString()} buffered events
         (most recent 500 kept).
       </p>

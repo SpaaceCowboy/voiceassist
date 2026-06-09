@@ -48,6 +48,9 @@ export type ConnStatus =
   | "paused"
   | "error";
 
+/** Which feed implementation is currently delivering events. */
+export type Transport = "sse" | "polling" | "mock";
+
 /** Parsed, defensive view of `GET /api/health?detailed=true`. */
 export interface HealthSnapshot {
   ok: boolean;
@@ -61,7 +64,6 @@ export interface HealthSnapshot {
 export interface Snapshot {
   calls: Array<Record<string, unknown>>;
   appointments: Array<Record<string, unknown>>;
-  activeSessions: number | null;
 }
 
 /** Callbacks every LogSource pushes into. The store wires these up. */
@@ -69,6 +71,8 @@ export interface LogSourceHandlers {
   onEvents: (events: LiveEvent[]) => void;
   onStatus: (status: ConnStatus, detail?: string) => void;
   onHealth: (health: HealthSnapshot) => void;
+  /** Reports which feed is live so the UI can adapt (e.g. SSE vs. polling). */
+  onTransport: (transport: Transport) => void;
 }
 
 /** Common control surface so the page can drive any feed identically. */

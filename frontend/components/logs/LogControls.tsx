@@ -60,6 +60,7 @@ export function LogControls() {
   const sources = useLogsStore((s) => s.sources);
   const paused = useLogsStore((s) => s.paused);
   const pollMs = useLogsStore((s) => s.pollMs);
+  const transport = useLogsStore((s) => s.transport);
 
   const setQuery = useLogsStore((s) => s.setQuery);
   const toggleSeverity = useLogsStore((s) => s.toggleSeverity);
@@ -108,7 +109,9 @@ export function LogControls() {
           Clear
         </Button>
 
-        {/* Poll rate segmented control */}
+        {/* Poll rate segmented control — only meaningful when the live SSE
+            stream is unavailable and we've fallen back to polling. */}
+        {transport === "sse" ? null : (
         <div
           className="inline-flex overflow-hidden rounded-xl border"
           style={{ borderColor: "rgb(var(--border))" }}
@@ -132,6 +135,7 @@ export function LogControls() {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Bottom row: filter chips */}

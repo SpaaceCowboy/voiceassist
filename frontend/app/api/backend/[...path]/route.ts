@@ -128,6 +128,11 @@ async function handler(
       headers,
       body,
       cache: "no-store",
+      // Forward the client abort so long-lived upstream requests (e.g. the SSE
+      // /api/logs/stream tail) are torn down when the browser disconnects.
+      // Without this, the backend never sees req close and leaks the stream
+      // subscription + heartbeat on every navigation, pause, or reconnect.
+      signal: req.signal,
     });
 
     const outHeaders = buildResponseHeaders(upstream);

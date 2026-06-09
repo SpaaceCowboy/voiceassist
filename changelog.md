@@ -2,6 +2,23 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-09 — Live Activity: SSE contract fixes (health, leak, restart-safe ids, transport UX)
+
+Review of the Live Activity feature surfaced a cluster of bugs where the frontend SSE client was written against a richer backend contract than the backend actually implemented, plus a stream leak in the proxy. Fixed:
+
+**Backend:**
+- `backend/src/routes/logs.ts` — `/stream` now emits periodic `event: health` frames (DB/Redis up + latency, uptime) via a single shared 15s timer that's lazily started with the first stream and torn down with the last (no background pings, no N× pings per client). Previously the frontend listened for `event: health` but the backend never sent it, so the dashboard's Database/Redis/Uptime tiles were permanently "Unknown" in the default SSE path. Backfilled events on connect are now flagged `historical: true` so the dashboard dims them and doesn't treat the replay (which repeats on every reconnect) as fresh activity.
+- `backend/src/utils/logEvents.ts` — event ids are now prefixed with a per-process boot id (`evt:<boot>:<seq>`) instead of a bare counter that reset to 0 on every restart. The bare counter collided with ids the still-open dashboard had already seen, so the first N events after a backend redeploy were silently deduped away. Added `historical?` to the `LiveEvent` type.
+
+**Frontend:**
+- `app/api/backend/[...path]/route.ts` — forward `signal: req.signal` to the upstream fetch. Without it, closing the SSE EventSource (navigation/pause/reconnect) never aborted the proxy→backend request, so the backend never saw the close and leaked the stream subscription + heartbeat on every disconnect.
+- `lib/logs/sources.ts` — reset `everOpened` in `SseLogSource.stop()` so a resume-after-pause that fails to open degrades to polling instead of spinning in "reconnecting"; report the active feed via a new `onTransport` callback.
+- `store/logs.ts` + `lib/logs/types.ts` — added `transport` state ("sse"|"polling"|"mock") and `Transport` type; removed the dead `Snapshot.activeSessions` field (polling always set it null, making the "Active calls" branch in `deriveEvents` unreachable) and that branch.
+- `components/logs/LogsPageClient.tsx` — show an amber banner when SSE silently degrades to polling (a much thinner feed) and adapt the footer copy per transport.
+- `components/logs/LogControls.tsx` — hide the poll-rate control on SSE, where it does nothing.
+- `components/logs/LogStream.tsx` — drop `aria-live="polite"` from the whole log (a 100-event backfill flooded screen readers) in favour of an `sr-only` status region announcing the new-event backlog count.
+- `CLAUDE.md` — corrected the auth description (httpOnly cookie via proxy, not `localStorage`), which the SSE feed depends on.
+
 ## 2026-06-04 — Live Activity: real backend log-stream (SSE) + conversation-threaded UI + 429 fix
 
 Follow-up to the Live Activity page below. The owner wanted **everything** the backend terminal shows — every conversation turn, every assistant reply, every tool call, every appointment book/edit/cancel with full data (name/date/time/doctor) — on the frontend, prettier. Polling can't do that (the data isn't in the REST API, and it tripped the rate limiter). So, with explicit owner approval to touch the backend **for this feature**, added a real log-stream.

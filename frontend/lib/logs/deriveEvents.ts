@@ -213,22 +213,6 @@ export function deriveEvents(prev: Snapshot | null, curr: Snapshot): LiveEvent[]
     }
   }
 
-  // ---- Active sessions ------------------------------------------------------
-  if (!first && prev && curr.activeSessions != null && prev.activeSessions != null) {
-    const delta = curr.activeSessions - prev.activeSessions;
-    if (delta !== 0) {
-      out.push({
-        id: `session:active:${Date.now()}`,
-        ts: Date.now(),
-        severity: "info",
-        source: "session",
-        title: `Active calls: ${curr.activeSessions}`,
-        detail: delta > 0 ? `+${delta} started` : `${delta} ended`,
-        meta: { active: curr.activeSessions },
-      });
-    }
-  }
-
   // On first load, sort historical rows oldest→newest and cap them.
   if (first) {
     out.sort((a, b) => a.ts - b.ts);

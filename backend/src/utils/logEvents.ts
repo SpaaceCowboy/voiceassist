@@ -18,6 +18,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { randomBytes } from 'crypto';
 
 export type LiveSeverity = 'info' | 'success' | 'warn' | 'error';
 export type LiveSource = 'call' | 'appointment' | 'session' | 'system' | 'tool' | 'ai';
@@ -33,6 +34,8 @@ export interface LiveEvent {
   detail?: string;
   meta?: Record<string, string | number | undefined>;
   ref?: { href: string; label: string };
+  /** True for rows replayed from history on connect (vs. captured live). */
+  historical?: boolean;
 }
 
 export interface RawLog {
@@ -45,6 +48,13 @@ export interface RawLog {
 const RING_SIZE = 200;
 const ring: LiveEvent[] = [];
 let seq = 0;
+
+// A per-process boot id keeps event ids globally unique across restarts. The
+// dashboard dedupes by id and keeps its `seen` set for the life of the page, so
+// a bare `evt:1, evt:2, …` counter that resets to 0 on every backend restart
+// would collide with ids the client has already seen — and those fresh events
+// would be silently dropped until the counter passed the old high-water mark.
+const BOOT_ID = randomBytes(4).toString('hex');
 
 const bus = new EventEmitter();
 bus.setMaxListeners(0); // many concurrent SSE clients are fine
@@ -116,7 +126,7 @@ function make(p: {
     ...(p.meta ?? {}),
   };
   return {
-    id: `evt:${seq}`,
+    id: `evt:${BOOT_ID}:${seq}`,
     ts: Date.now(),
     source: p.source,
     severity: p.severity,

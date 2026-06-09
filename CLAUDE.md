@@ -40,7 +40,7 @@ npm run lint                    # eslint
 
 - **App Router** under `frontend/app/` — route groups like `(auth)`, feature folders (`appointments/`, `calls/`, `patients/`, `reservations/`, `faqs/`, `status/`, `dashboard/`, `config/`, `debug/`).
 - **State**: Zustand stores in `store/` (`auth.ts`, `ui.ts`). No React Query in this project despite the global default — `lib/query.ts` and `lib/backend.ts` implement a thin fetch wrapper with `BackendError`.
-- **Backend calls**: `lib/backend.ts` reads `auth-token` from `localStorage` and attaches `Authorization: Bearer …`. A `DATA_SOURCE` / `NEXT_PUBLIC_DATA_SOURCE` env switch toggles between live backend and mock data (`lib/mock-data.ts`).
+- **Backend calls**: all requests go through the same-origin proxy `app/api/backend/[...path]/route.ts`, which reads the **httpOnly `auth-token` cookie** (set by the proxy on login) and forwards it to the backend as `Authorization: Bearer …`. The browser never holds the raw token, so EventSource/SSE (e.g. the Live Activity `/api/logs/stream`) authenticate via that cookie automatically. A `DATA_SOURCE` / `NEXT_PUBLIC_DATA_SOURCE` env switch toggles between live backend and mock data (`lib/mock-data.ts`).
 - **Components** are grouped by feature (`components/appointments/`, `components/patients/`) plus shared `components/ui/`. `AppShell.tsx` + `nav.tsx` wrap pages.
 
 ## Frontend Build Gotchas
