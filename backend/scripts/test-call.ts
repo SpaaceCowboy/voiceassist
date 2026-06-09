@@ -213,7 +213,18 @@ async function main() {
     try {
       await runScenario(key);
     } catch (error: any) {
-      console.error(`\nFailed (${key}):`, error.message || error);
+      if (error?.status === 451) {
+        console.error(
+          `\nFailed (${key}): Twilio API returned 451 (blocked by region).` +
+            `\n  This is NOT an account suspension — Twilio's edge geo-blocks API` +
+            `\n  requests from certain networks/countries, and the same 451 is` +
+            `\n  returned even for invalid credentials. Run this script from a` +
+            `\n  machine/network Twilio doesn't block (e.g. your local machine or` +
+            `\n  the Render shell), not from a sandboxed/remote environment.`,
+        );
+      } else {
+        console.error(`\nFailed (${key}):`, error.message || error);
+      }
     }
 
     // Wait between scenarios so the line isn't busy
