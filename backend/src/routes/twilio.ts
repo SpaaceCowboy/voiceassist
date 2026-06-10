@@ -9,6 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import conversationService from '../services/conversation'
 import deepgramService from '../services/deepgram'
 import ttsService from '../services/tts'
+import { pickFiller } from '../services/fillers'
 import redis from '../config/redis'
 import logger from '../utils/logger'
 import type {
@@ -209,6 +210,10 @@ export function setupMediaStreamWebSocket(server: Server): void {
       let pendingFragment = '';
       let pendingFragmentStartedAt = 0;
       let transcriptQueue: string[] = [];
+      // Indices into FILLER_PHRASES already played on this call — kept in
+      // memory (not Redis) since it's WebSocket-scoped state with no other
+      // readers, and reset implicitly when this connection closes.
+      const usedFillerIndices: Set<number> = new Set();
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
       let debounceBuffer = '';
       // Wait this long for more speech before processing. Shorter when the
@@ -410,7 +415,7 @@ export function setupMediaStreamWebSocket(server: Server): void {
           // up front so a barge-in during generation/playback can interrupt.
           isSpeaking = true;
           const speaker = streamSid
-            ? createSentenceSpeaker(ws, streamSid, callSid, () => !callEnded && isSpeaking)
+            ? createSentenceSpeaker(ws, streamSid, callSid, () => !callEnded && isSpeaking, usedFillerIndices)
             : null;
 
           const response = await conversationService.processInput(
@@ -591,11 +596,17 @@ function createSentenceSpeaker(
   streamSid: string,
   callSid: string,
   isActive: () => boolean,
+  usedFillerIndices?: Set<number>,
 ) {
   let buffer = '';
   let sendChain: Promise<void> = Promise.resolve();
   let sentenceCount = 0;
+  let assistantStarted = false;
   const startTime = Date.now();
+
+  // Play a short stall phrase if the LLM hasn't produced anything by this
+  // point — keeps the caller engaged instead of letting dead air run.
+  const FILLER_DELAY_MS = 2500;
 
   function speak(rawSentence: string): void {
     const sentence = rawSentence.trim();
@@ -620,8 +631,28 @@ function createSentenceSpeaker(
     });
   }
 
+  const fillerTimer = usedFillerIndices
+    ? setTimeout(() => {
+        if (assistantStarted || !isActive()) return;
+        const picked = pickFiller(usedFillerIndices);
+        if (!picked) return;
+        usedFillerIndices.add(picked.index);
+        logger.call(callSid, 'info', 'Filler phrase', {
+          text: picked.text,
+          waitedMs: Date.now() - startTime,
+        });
+        // Pipe through the same serial chain — anything the LLM produces
+        // afterwards is appended via push() and naturally queues behind.
+        speak(picked.text);
+      }, FILLER_DELAY_MS)
+    : null;
+
   return {
     push(delta: string): void {
+      if (delta && !assistantStarted) {
+        assistantStarted = true;
+        if (fillerTimer) clearTimeout(fillerTimer);
+      }
       buffer += delta;
       // Flush every complete sentence (ends with . ! or ?).
       let boundary: number;
@@ -632,6 +663,7 @@ function createSentenceSpeaker(
       }
     },
     async done(): Promise<void> {
+      if (fillerTimer) clearTimeout(fillerTimer);
       if (buffer.trim()) {
         speak(buffer);
         buffer = '';

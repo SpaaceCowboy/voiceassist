@@ -2,6 +2,14 @@
 
 Completed items from `pending-work.md`. Newest first.
 
+## 2026-06-10 — Stall-phrase filler when the assistant is slow
+
+If the LLM takes more than ~2.5s to start producing speech on a turn, the caller now hears a short engagement phrase ("One moment please.", "Let me check that for you.", …) instead of dead air. The text is drawn from a fixed in-memory list and the audio is served from the existing Redis TTS cache, so there's no extra LLM call and the playback is effectively a cache hit.
+
+- `backend/src/services/fillers.ts` (new) — 8 distinct stall phrases, `pickFiller(used)` that avoids repeating any phrase within a single call, and `prewarmFillerCache()` that TTS-prewarms each phrase at boot.
+- `backend/src/server.ts` — call `prewarmFillerCache()` next to the existing `ttsService.prewarmCache()` on startup.
+- `backend/src/routes/twilio.ts` — per-WebSocket `usedFillerIndices` set (reset implicitly on connection close); `createSentenceSpeaker` now takes that set, schedules a `setTimeout(FILLER_DELAY_MS=2500)` on construction, and cancels it the moment the LLM streams its first delta. If the timer fires first, the filler is piped through the same serial `sendChain` so any subsequent assistant text queues behind it. No filler is added to message history or transcripts — it's purely a route-layer audio injection.
+
 ## 2026-06-09 — Live Activity: SSE contract fixes (health, leak, restart-safe ids, transport UX)
 
 Review of the Live Activity feature surfaced a cluster of bugs where the frontend SSE client was written against a richer backend contract than the backend actually implemented, plus a stream leak in the proxy. Fixed:

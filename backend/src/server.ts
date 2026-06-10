@@ -28,6 +28,7 @@ import { deleteOldSessions } from './models/session';
 import { flushUsageCounts as flushFaqUsageCounts } from './models/faq';
 import logger from './utils/logger';
 import ttsService from './services/tts';
+import { prewarmFillerCache } from './services/fillers';
 
 // ===========================================
 // ENV VALIDATION
@@ -245,6 +246,7 @@ async function startServer(): Promise<void> {
       logger.info('='.repeat(50));
 
       ttsService.prewarmCache().catch(() => {});
+      prewarmFillerCache().catch(() => {});
       logger.info('');
       logger.info('Twilio Webhook URLs (configure in Twilio console):');
       logger.info(`  Voice:  POST https://<your-domain>/twilio/voice`);
