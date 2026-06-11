@@ -214,22 +214,12 @@ docker compose -f docker-compose.prod.yml exec postgres \
 
 ## Known issues to address before going fully live
 
-1. **`004_call_metrics.sql` is not in the auto-migration list**
-   (`backend/src/config/migrate.ts` runs only `002`, `003`, `seed_001`). The call
-   analytics metrics table/columns won't be created, so metrics endpoints may
-   error. Either add `004_call_metrics.sql` to `MIGRATION_FILES`, or apply it once
-   manually:
-   ```bash
-   docker compose -f docker-compose.prod.yml exec -T postgres \
-     psql -U "$DB_USER" -d "$DB_NAME" < backend/migrations/004_call_metrics.sql
-   ```
-
-2. **Twilio signature validation behind a proxy** — `twilioAuth.ts` rebuilds the
+1. **Twilio signature validation behind a proxy** — `twilioAuth.ts` rebuilds the
    request URL from forwarded headers. With a single Caddy in front this should
    match, but if test calls return 403, this is the place to look (see
    `pending-work.md`, backend HIGH). Do **not** paper over it with
    `SKIP_TWILIO_VALIDATION=true` in production.
 
-3. **`unhandledRejection` shuts the server down** (`server.ts`) — a transient
+2. **`unhandledRejection` shuts the server down** (`server.ts`) — a transient
    background rejection can drop active calls. Tracked in `pending-work.md`;
    worth fixing before heavy traffic.
