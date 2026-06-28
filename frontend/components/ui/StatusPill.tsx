@@ -7,7 +7,7 @@ const TONE_CLASS: Record<Tone, string> = {
   bad: "bg-red-100 text-red-700 ring-red-600/20 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-400/20",
   warn: "bg-amber-100 text-amber-700 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/20",
   accent:
-    "bg-violet-100 text-violet-700 ring-violet-600/20 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-400/20",
+    "bg-teal-100 text-teal-700 ring-teal-600/20 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/20",
   info: "bg-sky-100 text-sky-700 ring-sky-600/20 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-400/20",
   neutral:
     "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-white/10 dark:text-slate-300 dark:ring-white/15",
@@ -17,7 +17,7 @@ const DOT_CLASS: Record<Tone, string> = {
   good: "bg-emerald-500",
   bad: "bg-red-500",
   warn: "bg-amber-500",
-  accent: "bg-violet-500",
+  accent: "bg-teal-500",
   info: "bg-sky-500",
   neutral: "bg-slate-400",
 };

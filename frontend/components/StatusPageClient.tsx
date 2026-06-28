@@ -123,7 +123,7 @@ function AuthChip({ auth }: { auth: Auth }) {
   const map: Record<Auth, { label: string; cls: string }> = {
     public: { label: "Public", cls: "text-emerald-600 dark:text-emerald-300" },
     user: { label: "Authenticated", cls: "text-sky-600 dark:text-sky-300" },
-    moderator: { label: "Moderator", cls: "text-violet-600 dark:text-violet-300" },
+    moderator: { label: "Moderator", cls: "text-teal-600 dark:text-teal-300" },
   };
   const a = map[auth];
   return (

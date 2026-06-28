@@ -138,7 +138,7 @@ function Nav() {
 function Hero() {
   return (
     <section className="relative mx-auto max-w-[1180px] px-6 pb-12 pt-28 sm:pt-36">
-      {/* dark-mode violet glow + floating decorative blobs */}
+      {/* dark-mode teal glow + floating decorative blobs */}
       <div
         aria-hidden
         className="pointer-events-none absolute right-[6%] top-[8%] -z-10 h-72 w-72 rounded-full opacity-50 blur-3xl"

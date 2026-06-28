@@ -18,7 +18,7 @@ function Tile({
     good: "bg-emerald-500",
     bad: "bg-red-500",
     warn: "bg-amber-500",
-    accent: "bg-violet-500",
+    accent: "bg-teal-500",
     neutral: "bg-slate-400",
   };
   return (

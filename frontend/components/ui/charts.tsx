@@ -8,13 +8,13 @@ import * as React from "react";
 
 /** Categorical palette (RGB triples) — reads well on light and dark surfaces. */
 export const SERIES_COLORS = [
-  "139 92 246", // violet (accent)
+  "20 184 166", // teal (accent)
   "56 189 248", // sky
+  "129 140 248", // indigo
   "16 185 129", // emerald
   "251 191 36", // amber
+  "34 211 238", // cyan
   "244 63 94", // rose
-  "168 85 247", // purple
-  "20 184 166", // teal
   "249 115 22", // orange
 ] as const;
 

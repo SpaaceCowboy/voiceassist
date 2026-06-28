@@ -10,7 +10,7 @@ export function AppointmentStatusPill({ value }: { value: string }) {
           : s.includes("no_show")
             ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
             : s.includes("checked") || s.includes("progress") || s.includes("confirm")
-              ? "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
+              ? "bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-200"
               : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200";
   
     return (

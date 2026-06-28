@@ -5,7 +5,7 @@
 /* ============================================================
    NeuroSpine dashboard — design tokens
    Goal: a calm, low-fatigue workspace. No pure black / pure white,
-   gentle contrast, one refined violet accent, semantic status hues.
+   gentle contrast, one refined teal accent, semantic status hues.
    Everything downstream reads these CSS variables, so retuning here
    restyles the whole app in both themes.
    ============================================================ */
@@ -21,9 +21,9 @@
   --text: 28 31 38;         /* near-black, easier than pure #000 */
   --muted: 107 114 128;     /* secondary text */
 
-  /* accent — refined violet (violet-600 for crisp contrast on white) */
-  --accent: 124 58 237;
-  --accent2: 139 92 246;
+  /* accent — clinical teal (teal-600 for crisp contrast on white) */
+  --accent: 13 148 136;
+  --accent2: 20 184 166;
 
   /* elevation */
   --shadow-sm: 0 1px 2px rgba(16, 18, 27, 0.06);
@@ -50,9 +50,9 @@ html.dark {
   --text: 230 232 238;      /* soft white, not #fff */
   --muted: 152 159 171;     /* #989fab */
 
-  /* lighter violet reads better on dark */
-  --accent: 167 139 250;
-  --accent2: 196 181 253;
+  /* lighter teal reads better on dark */
+  --accent: 45 212 191;
+  --accent2: 153 246 228;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
   --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.40);
@@ -146,7 +146,7 @@ textarea:focus-visible,
 
 /* ============================================================
    Claymorphism kit (landing) — tuned, premium soft UI.
-   Re-derived from the dashboard's cool/violet tokens. Dark mode is a
+   Re-derived from the dashboard's cool/teal tokens. Dark mode is a
    separate derivation (NOT an inversion): surface sits ABOVE the bg, the
    top highlight is faint, the underside is stronger, plus a light-catching
    rim. One Tailwind class per token (shadow-clay / rounded-clay / bg-clay-*)
