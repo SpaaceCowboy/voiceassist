@@ -1,0 +1,20 @@
+# Caddyfile — reverse proxy + automatic HTTPS.
+# Domains and ACME email are pulled from the environment (set in ./.env, passed
+# in via the caddy service's env_file). Caddy obtains + renews Let's Encrypt
+# certs automatically and upgrades WebSocket connections without extra config.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Dashboard (Next.js)
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy frontend:3000
+}
+
+# Backend API + Twilio webhooks + /media-stream WebSocket
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy backend:3000
+}
