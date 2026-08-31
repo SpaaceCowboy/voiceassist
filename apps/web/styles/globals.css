@@ -1,0 +1,309 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@theme {
+  --font-sans: var(--font-geist), ui-sans-serif, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-background-deep: var(--background-deep);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-spark: var(--spark);
+  --color-verified: var(--verified);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+  --color-info: var(--info);
+
+  --radius-sm: 0.35rem;
+  --radius-md: 0.6rem;
+  --radius-lg: 0.9rem;
+  --radius-xl: 1.25rem;
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-lift: var(--shadow-lift);
+  --shadow-plasma: var(--glow-plasma);
+  --shadow-signal: var(--glow-signal);
+
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --breakpoint-xs: 30rem;
+  --container-content: 76rem;
+  --container-copy: 44rem;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+html.light {
+  color-scheme: light;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist), sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+html[dir="rtl"] body {
+  font-family: var(--font-estedad), var(--font-geist), sans-serif;
+}
+
+html[dir="rtl"] .editorial {
+  font-family: var(--font-estedad), var(--font-newsreader), serif;
+  letter-spacing: 0;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+a,
+button,
+input,
+select {
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-out-quart);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* --- typography -------------------------------------------------------- */
+.editorial {
+  font-family: var(--font-newsreader), Georgia, serif;
+  letter-spacing: -0.025em;
+}
+
+.container-page {
+  width: min(100% - 2rem, 76rem);
+  margin-inline: auto;
+}
+
+.eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  line-height: 1rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+/* Plasma → Ion sweep. The single signature gradient of the brand. */
+.text-plasma {
+  background: linear-gradient(102deg, var(--primary) 0%, var(--spark) 52%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rule-plasma {
+  background: linear-gradient(90deg, transparent, var(--primary), var(--spark), transparent);
+}
+
+/* --- surfaces ---------------------------------------------------------- */
+.panel {
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.grid-field {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+}
+
+/* --- motion primitives ------------------------------------------------- */
+@keyframes ts-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--rise-from, 22px), 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ts-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes ts-pulse-ring {
+  0% { opacity: 0.85; transform: scale(1); }
+  70%, 100% { opacity: 0; transform: scale(2.4); }
+}
+
+@keyframes ts-drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -14px, 0); }
+}
+
+@keyframes ts-scan {
+  from { transform: translate3d(0, -100%, 0); }
+  to { transform: translate3d(0, 900%, 0); }
+}
+
+.animate-marquee { animation: ts-marquee var(--marquee-duration, 42s) linear infinite; }
+.animate-drift { animation: ts-drift 7s var(--ease-out-quart) infinite; }
+
+/* Each line of the pinned process panel re-enters when the step changes.
+   React remounts them (the key includes the value), so the animation replays
+   on its own without any imperative restart. */
+.ts-panel-line {
+  --rise-from: 7px;
+  animation: ts-rise 460ms var(--ease-out-expo) backwards;
+}
+
+/* --- scroll reveal ------------------------------------------------------
+   Opacity + transform only, so a reveal never reflows the page (CLS stays 0).
+   The reduced-motion block below drops the travel and shows content instantly. */
+.ts-reveal {
+  opacity: 0;
+  transform: translate3d(0, var(--rise-from, 22px), 0);
+  transition:
+    opacity 620ms var(--ease-out-expo) var(--rise-delay, 0ms),
+    transform 620ms var(--ease-out-expo) var(--rise-delay, 0ms);
+}
+.ts-reveal[data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+/* --- 3D tilt + cursor spotlight ----------------------------------------- */
+.ts-tilt {
+  position: relative;
+  isolation: isolate;
+  transform: perspective(1100px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 460ms var(--ease-out-expo);
+}
+.ts-tilt:hover {
+  /* Follow the cursor tightly while engaged, glide back slowly on exit. */
+  transition-duration: 90ms;
+}
+.ts-tilt[data-spotlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-out-quart);
+  background: radial-gradient(
+    340px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    color-mix(in oklab, var(--primary) 16%, transparent),
+    transparent 62%
+  );
+}
+.ts-tilt[data-spotlight]:hover::after,
+.ts-tilt[data-spotlight]:focus-within::after {
+  opacity: 1;
+}
+
+/* --- hero 3D stage -------------------------------------------------------
+   A resting tilt is baked in so the object reads as dimensional before the
+   cursor ever arrives; pointer and scroll add on top of it. No transition
+   here on purpose - the pointer values are already eased upstream, so a
+   transition would only fight them. */
+.ts-stage {
+  transform:
+    rotateX(calc(-3deg + var(--rx, 0deg) + var(--progress, 0) * 16deg))
+    rotateY(calc(-9deg + var(--ry, 0deg)))
+    translateY(calc(var(--progress, 0) * -26px));
+  will-change: transform;
+}
+
+/* --- theme toggle --------------------------------------------------------
+   Both icons live in the DOM at once and the theme class picks the visible
+   one, so the toggle renders identically on server and client. They
+   cross-rotate rather than swap, which reads as one mechanism turning over
+   instead of two icons trading places. */
+.ts-theme-icon {
+  position: absolute;
+  transition:
+    transform 480ms var(--ease-spring),
+    opacity 240ms var(--ease-out-quart);
+}
+[data-theme-icon="sun"] {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+[data-theme-icon="moon"] {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.4);
+}
+html.light [data-theme-icon="sun"] {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.4);
+}
+html.light [data-theme-icon="moon"] {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+/* --- decode text --------------------------------------------------------- */
+/* Kept to opacity only: the headline it runs on is gradient-clipped text,
+   and setting `color` there would knock out the background-clip. */
+[data-decoding] {
+  opacity: 0.86;
+}
+
+/* --- accessibility ------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .ts-reveal { opacity: 1 !important; transform: none !important; }
+  .ts-tilt { transform: none !important; }
+  .ts-stage { transform: rotateX(-3deg) rotateY(-9deg) !important; }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

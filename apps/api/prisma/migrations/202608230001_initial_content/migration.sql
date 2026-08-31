@@ -1,0 +1,15 @@
+CREATE TABLE "Author" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "bio" TEXT, "avatarUrl" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "Author_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "Category" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "slug" TEXT NOT NULL, "description" TEXT, CONSTRAINT "Category_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "Article" ("id" TEXT NOT NULL, "title" TEXT NOT NULL, "slug" TEXT NOT NULL, "excerpt" TEXT, "content" TEXT NOT NULL, "heroImage" TEXT, "published" BOOLEAN NOT NULL DEFAULT false, "publishedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, "authorId" TEXT NOT NULL, "categoryId" TEXT NOT NULL, CONSTRAINT "Article_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "Author_name_idx" ON "Author"("name");
+CREATE UNIQUE INDEX "Category_slug_key" ON "Category"("slug");
+CREATE INDEX "Category_name_idx" ON "Category"("name");
+CREATE UNIQUE INDEX "Article_slug_key" ON "Article"("slug");
+CREATE INDEX "Article_slug_idx" ON "Article"("slug");
+CREATE INDEX "Article_published_idx" ON "Article"("published");
+CREATE INDEX "Article_publishedAt_idx" ON "Article"("publishedAt");
+CREATE INDEX "Article_categoryId_idx" ON "Article"("categoryId");
+CREATE INDEX "Article_authorId_idx" ON "Article"("authorId");
+CREATE INDEX "Article_published_publishedAt_idx" ON "Article"("published", "publishedAt");
+ALTER TABLE "Article" ADD CONSTRAINT "Article_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "Author"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Article" ADD CONSTRAINT "Article_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -1,15 +1,17 @@
 # dependencies
-/node_modules/
+node_modules/
 
-# Next.js build output
-/.next/
-/out/
+# Build output
+.next/
+out/
+dist/
+uploads/
 
 # Storybook build output
-/storybook-static/
+storybook-static/
 
 # test coverage
-/coverage/
+coverage/
 
 # TypeScript caches
 *.tsbuildinfo

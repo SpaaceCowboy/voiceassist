@@ -1,0 +1,85 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-blog_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blog_password}
+      POSTGRES_DB: ${POSTGRES_DB:-blog_db}
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - blog_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-blog_user}:${POSTGRES_PASSWORD:-blog_password}@db:5432/${POSTGRES_DB:-blog_db}?schema=public
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-this-password}
+      READER_SESSION_DAYS: ${READER_SESSION_DAYS:-30}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
+      MEDIA_PUBLIC_URL: ${MEDIA_PUBLIC_URL:-http://localhost:4001/media}
+      IMAGE_HOSTS: ${IMAGE_HOSTS:-images.unsplash.com}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_HOST_PORT:-4001}:4001"
+    volumes:
+      - api_uploads:/app/apps/api/uploads
+    command: ["sh", "-c", "npm run prisma:deploy --workspace @termspace/api && npm run start --workspace @termspace/api"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4001
+      NEXT_PUBLIC_API_URL: /backend
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_HOST_PORT:-3000}:3000"
+
+  blog:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.blog
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4001
+      NEXT_PUBLIC_API_URL: /backend
+      NEXT_PUBLIC_SITE_URL: ${BLOG_SITE_URL:-http://localhost:3001}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${BLOG_HOST_PORT:-3001}:3001"
+
+volumes:
+  blog_pgdata:
+  api_uploads:

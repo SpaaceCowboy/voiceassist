@@ -1,0 +1,142 @@
+import type { Request, Response } from "express";
+import { prisma } from "../lib/prisma.js";
+
+const productInclude = {
+  creator: { select: { id: true, name: true, handle: true, initials: true, verified: true, bio: true, followers: true, _count: { select: { products: true } } } },
+  category: { select: { name: true, slug: true } },
+} as const;
+
+function serializeProduct(product: any) {
+  return {
+    ...product,
+    rating: Number(product.rating),
+    pricing: { amountMinor: product.priceMinor, currency: product.currency, model: product.pricingModel },
+    compatibility: { platforms: product.platforms, models: product.models },
+    category: product.category.name,
+    creator: product.creator ? {
+      ...product.creator,
+      products: product.creator._count?.products ?? product.creator.products ?? 0,
+      _count: undefined,
+    } : undefined,
+    priceMinor: undefined,
+    currency: undefined,
+    pricingModel: undefined,
+    platforms: undefined,
+    models: undefined,
+    categoryId: undefined,
+    creatorId: undefined,
+  };
+}
+
+export async function getMarketplaceHome(_req: Request, res: Response) {
+  const [products, creators, categories, total] = await Promise.all([
+    prisma.marketplaceProduct.findMany({ where: { published: true, featured: true }, include: productInclude, orderBy: [{ usageCount: "desc" }], take: 3 }),
+    prisma.marketplaceCreator.findMany({ where: { products: { some: { published: true } } }, select: { id: true, name: true, handle: true, initials: true, verified: true, bio: true, followers: true, _count: { select: { products: { where: { published: true } } } } }, orderBy: [{ verified: "desc" }, { followers: "desc" }], take: 3 }),
+    prisma.marketplaceCategory.findMany({ where: { products: { some: { published: true } } }, select: { name: true, slug: true, _count: { select: { products: { where: { published: true } } } } }, orderBy: [{ position: "asc" }, { name: "asc" }] }),
+    prisma.marketplaceProduct.count({ where: { published: true } }),
+  ]);
+  res.json({ data: {
+    products: products.map(serializeProduct),
+    creators: creators.map((creator) => ({ ...creator, products: creator._count.products, _count: undefined })),
+    categories: categories.map((category) => ({ name: category.name, slug: category.slug, products: category._count.products })),
+    total,
+  } });
+}
+
+export async function listMarketplaceProducts(req: Request, res: Response) {
+  const { q, type, category, platform, price, verified, minRating, sort, page, limit } = req.query as any;
+  const where: any = {
+    published: true,
+    ...(q ? { OR: [
+      { name: { contains: q, mode: "insensitive" } },
+      { outcome: { contains: q, mode: "insensitive" } },
+      { description: { contains: q, mode: "insensitive" } },
+      { creator: { name: { contains: q, mode: "insensitive" } } },
+    ] } : {}),
+    ...(type ? { type } : {}),
+    ...(category ? { category: { name: category } } : {}),
+    ...(platform ? { platforms: { has: platform } } : {}),
+    ...(price ? { pricingModel: price === "free" ? "free" : "one-time" } : {}),
+    ...(verified ? { verified: true } : {}),
+    ...(minRating ? { rating: { gte: minRating } } : {}),
+  };
+  const orderBy: any = sort === "rating" ? [{ rating: "desc" }, { reviewCount: "desc" }]
+    : sort === "newest" ? [{ updatedAt: "desc" }]
+      : sort === "price-low" ? [{ priceMinor: "asc" }, { usageCount: "desc" }]
+        : [{ featured: "desc" }, { usageCount: "desc" }];
+  const [products, total] = await Promise.all([
+    prisma.marketplaceProduct.findMany({ where, include: productInclude, orderBy, skip: (page - 1) * limit, take: limit }),
+    prisma.marketplaceProduct.count({ where }),
+  ]);
+  res.json({ data: products.map(serializeProduct), meta: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+}
+
+export async function getMarketplaceProduct(req: Request, res: Response) {
+  const product = await prisma.marketplaceProduct.findFirst({
+    where: { slug: String(req.params.slug), published: true },
+    include: {
+      ...productInclude,
+      versions: { orderBy: { releasedAt: "desc" } },
+      reviews: { where: { published: true }, orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!product) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Product not found" } }); return; }
+  const related = await prisma.marketplaceProduct.findMany({
+    where: { published: true, id: { not: product.id }, categoryId: product.categoryId },
+    include: productInclude,
+    orderBy: [{ featured: "desc" }, { usageCount: "desc" }],
+    take: 3,
+  });
+  res.json({ data: { ...serializeProduct(product), versions: product.versions, reviews: product.reviews, related: related.map(serializeProduct) } });
+}
+
+export async function listMarketplaceFavorites(_req: Request, res: Response) {
+  const favorites = await prisma.marketplaceFavorite.findMany({ where: { userId: res.locals.reader.id }, select: { product: { select: { slug: true } } } });
+  res.json({ data: favorites.map((item) => item.product.slug) });
+}
+
+async function findPublishedProduct(slug: string) {
+  return prisma.marketplaceProduct.findFirst({ where: { slug, published: true }, select: { id: true, slug: true, priceMinor: true, currency: true, pricingModel: true } });
+}
+
+export async function addMarketplaceFavorite(req: Request, res: Response) {
+  const product = await findPublishedProduct(String(req.params.slug));
+  if (!product) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Product not found" } }); return; }
+  await prisma.marketplaceFavorite.upsert({ where: { userId_productId: { userId: res.locals.reader.id, productId: product.id } }, create: { userId: res.locals.reader.id, productId: product.id }, update: {} });
+  res.status(204).send();
+}
+
+export async function removeMarketplaceFavorite(req: Request, res: Response) {
+  const product = await findPublishedProduct(String(req.params.slug));
+  if (product) await prisma.marketplaceFavorite.deleteMany({ where: { userId: res.locals.reader.id, productId: product.id } });
+  res.status(204).send();
+}
+
+export async function acquireMarketplaceProduct(req: Request, res: Response) {
+  const key = req.header("Idempotency-Key");
+  if (!key || key.length < 16 || key.length > 128) {
+    res.status(400).json({ error: { code: "IDEMPOTENCY_KEY_REQUIRED", message: "A 16-128 character Idempotency-Key header is required" } });
+    return;
+  }
+  const product = await findPublishedProduct(String(req.params.slug));
+  if (!product) { res.status(404).json({ error: { code: "NOT_FOUND", message: "Product not found" } }); return; }
+  const existing = await prisma.marketplaceOrder.findUnique({ where: { idempotencyKey: key } });
+  if (existing) {
+    if (existing.userId !== res.locals.reader.id || existing.productId !== product.id) {
+      res.status(409).json({ error: { code: "IDEMPOTENCY_CONFLICT", message: "Idempotency key was already used for another acquisition" } });
+      return;
+    }
+    res.json({ data: existing });
+    return;
+  }
+  if (product.priceMinor > 0 || product.pricingModel !== "free") {
+    res.status(503).json({ error: { code: "PAYMENT_PROVIDER_NOT_CONFIGURED", message: "Paid checkout is not available yet" } });
+    return;
+  }
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await tx.marketplaceOrder.create({ data: { userId: res.locals.reader.id, productId: product.id, idempotencyKey: key, amountMinor: 0, currency: product.currency, status: "completed" } });
+    await tx.marketplaceProduct.update({ where: { id: product.id }, data: { purchaseCount: { increment: 1 }, usageCount: { increment: 1 } } });
+    return created;
+  });
+  res.status(201).json({ data: order });
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@termspace/blog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TermSpace editorial frontend",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage.enabled=false"
+  },
+  "dependencies": {
+    "@fontsource-variable/estedad": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "next": "^16.3.2",
+    "next-intl": "^4.13.7",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "autoprefixer": "^10.4.2",
+    "jsdom": "^30.0.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.11"
+  }
+}

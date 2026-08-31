@@ -1,0 +1,175 @@
+import { hash } from "bcryptjs";
+import request from "supertest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const prismaMock = vi.hoisted(() => ({
+  adminUser: { findUnique: vi.fn() },
+  adminSession: { findFirst: vi.fn(), deleteMany: vi.fn(), create: vi.fn() },
+  article: { findUnique: vi.fn(), updateMany: vi.fn() },
+  readerUser: { findUnique: vi.fn(), update: vi.fn() },
+  readerSession: { findFirst: vi.fn(), deleteMany: vi.fn() },
+  marketplaceProduct: { findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
+  marketplaceCreator: { findMany: vi.fn() },
+  marketplaceCategory: { findMany: vi.fn() },
+  $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
+}));
+
+vi.mock("./lib/prisma.js", () => ({ prisma: prismaMock }));
+
+process.env.NODE_ENV = "test";
+const { createApp } = await import("./app.js");
+
+describe("API", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.$transaction.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([{ "?column?": 1 }]);
+    prismaMock.article.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("serves health with hardened headers", async () => {
+    const response = await request(createApp()).get("/api/health");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: "ok" });
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["x-powered-by"]).toBeUndefined();
+  });
+
+  it("reports database outages through health", async () => {
+    prismaMock.$queryRaw.mockRejectedValueOnce(new Error("database offline"));
+    const response = await request(createApp()).get("/api/health");
+    expect(response.status).toBe(503);
+    expect(response.body.error.code).toBe("DATABASE_UNAVAILABLE");
+  });
+
+  it("serves marketplace home data from the shared API", async () => {
+    prismaMock.marketplaceProduct.findMany.mockResolvedValue([]);
+    prismaMock.marketplaceProduct.count.mockResolvedValue(12);
+    prismaMock.marketplaceCreator.findMany.mockResolvedValue([]);
+    prismaMock.marketplaceCategory.findMany.mockResolvedValue([]);
+    const response = await request(createApp()).get("/api/marketplace/home");
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ products: [], creators: [], categories: [], total: 12 });
+  });
+
+  it("rejects invalid newsletter input before database access", async () => {
+    const response = await request(createApp())
+      .post("/api/newsletter/subscribers")
+      .send({ email: "not-an-email" });
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects oversized JSON payloads with 413", async () => {
+    const response = await request(createApp())
+      .post("/api/newsletter/subscribers")
+      .send({ email: `${"a".repeat(110_000)}@example.com` });
+    expect(response.status).toBe(413);
+    expect(response.body.error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
+  it("creates an HttpOnly session for valid credentials", async () => {
+    prismaMock.adminUser.findUnique.mockResolvedValue({
+      id: "admin-1",
+      email: "admin@example.com",
+      passwordHash: await hash("correct-password", 4),
+    });
+
+    const response = await request(createApp())
+      .post("/api/admin/login")
+      .send({ email: "admin@example.com", password: "correct-password" });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["set-cookie"][0]).toContain("HttpOnly");
+    expect(response.headers["set-cookie"][0]).toContain("SameSite=Lax");
+    expect(prismaMock.$transaction).toHaveBeenCalledOnce();
+  });
+
+  it("rejects invalid admin credentials", async () => {
+    prismaMock.adminUser.findUnique.mockResolvedValue(null);
+    const response = await request(createApp())
+      .post("/api/admin/login")
+      .send({ email: "admin@example.com", password: "wrong-password" });
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("INVALID_CREDENTIALS");
+  });
+
+  it("does not expose article preview tokens on public detail responses", async () => {
+    prismaMock.article.findUnique.mockResolvedValue({
+      id: "article-1",
+      title: "Published article",
+      slug: "published-article",
+      excerpt: null,
+      content: "Published article content",
+      heroImage: null,
+      published: true,
+      publishedAt: new Date("2026-08-27T00:00:00.000Z"),
+      createdAt: new Date("2026-08-27T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-27T00:00:00.000Z"),
+      scheduledAt: null,
+      previewToken: "private-preview-token",
+      seriesOrder: null,
+      author: { id: "author-1", name: "Author", bio: null, avatarUrl: null },
+      category: { id: "category-1", name: "Category", slug: "category" },
+      series: null,
+      tags: [],
+    });
+
+    const response = await request(createApp()).get("/api/articles/published-article");
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.previewToken).toBeUndefined();
+  });
+
+  it("returns a safe reader profile without authentication secrets", async () => {
+    prismaMock.readerSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      user: { id: "reader-1", email: "reader@example.com" },
+    });
+    prismaMock.readerUser.findUnique.mockResolvedValue({
+      email: "reader@example.com",
+      createdAt: new Date("2026-08-25T00:00:00.000Z"),
+      passwordHash: "secret-hash",
+      googleSubject: null,
+    });
+
+    const response = await request(createApp())
+      .get("/api/readers/profile")
+      .set("Cookie", "term_academy_reader=abcdefghijklmnopqrstuvwxyz123456");
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      email: "reader@example.com",
+      hasPassword: true,
+      connectedGoogle: false,
+    });
+    expect(response.body.data.passwordHash).toBeUndefined();
+  });
+
+  it("changes a reader password and invalidates other sessions", async () => {
+    prismaMock.readerSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      user: { id: "reader-1", email: "reader@example.com" },
+    });
+    prismaMock.readerUser.findUnique.mockResolvedValue({
+      passwordHash: await hash("old-password", 4),
+    });
+    prismaMock.readerUser.update.mockReturnValue(Promise.resolve({ id: "reader-1" }));
+    prismaMock.readerSession.deleteMany.mockReturnValue(Promise.resolve({ count: 2 }));
+
+    const response = await request(createApp())
+      .put("/api/readers/profile/password")
+      .set("Cookie", "term_academy_reader=abcdefghijklmnopqrstuvwxyz123456")
+      .send({ currentPassword: "old-password", newPassword: "new-password" });
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.readerUser.update).toHaveBeenCalledWith({
+      where: { id: "reader-1" },
+      data: { passwordHash: expect.any(String) },
+    });
+    expect(prismaMock.readerSession.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "reader-1", id: { not: "session-1" } },
+    });
+  });
+});

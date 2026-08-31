@@ -1,0 +1,339 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import {
+  Check,
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileText,
+  KeyRound,
+  LockKeyhole,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import { Badge } from "@/components/ui/badge";
+import { ProductActions } from "@/features/product/product-actions";
+import {
+  CompatibilityBadges,
+  CreatorIdentity,
+  ProductTypeBadge,
+  Rating,
+} from "@/components/marketplace/product-parts";
+import { ProductCard } from "@/components/marketplace/product-card";
+import { ApiError, getProduct } from "@/lib/api";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  try { const product = await getProduct((await params).slug); return { title: product.name, description: product.outcome }; }
+  catch { return { title: "Product" }; }
+}
+
+function Section({
+  title,
+  children,
+  id,
+}: {
+  title: string;
+  children: React.ReactNode;
+  id?: string;
+}) {
+  return (
+    <section id={id} className="border-t border-border py-9">
+      <h2 className="editorial text-3xl font-semibold">{title}</h2>
+      <div className="mt-5 text-[15px] leading-7 text-muted-foreground">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
+  let product;
+  try { product = await getProduct((await params).slug); }
+  catch (error) { if (error instanceof ApiError && error.status === 404) notFound(); throw error; }
+  const benefits = product.benefits;
+  const included = product.includedFiles ?? [];
+  const versions = product.versions;
+  const reviews = product.reviews;
+  return (
+    <>
+      <Header />
+      <main className="container-page py-8">
+        <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
+          Explore / {product.type} /{" "}
+          <span className="text-foreground">{product.name}</span>
+        </nav>
+        <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_21rem]">
+          <div>
+            <div className="flex flex-wrap gap-2">
+              <ProductTypeBadge type={product.type} />
+              <Badge variant="success">
+                <ShieldCheck size={12} />
+                Verified product
+              </Badge>
+            </div>
+            <h1 className="editorial mt-5 max-w-3xl text-5xl font-medium leading-none sm:text-6xl">
+              {product.name}
+            </h1>
+            <p className="mt-5 max-w-2xl text-xl leading-8 text-muted-foreground">
+              {product.outcome}
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
+              <CreatorIdentity creator={product.creator} />
+              <Rating rating={product.rating} count={product.reviewCount} />
+              <span className="text-xs text-muted-foreground">
+                {product.purchaseCount.toLocaleString()} purchases
+              </span>
+            </div>
+            <div className="mt-8 grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
+              <Meta label="Version" value={product.version} icon={RefreshCw} />
+              <Meta label="Updated" value={new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(product.updatedAt))} icon={Clock3} />
+              <Meta label="Package" value={product.packageFileCount && product.packageSizeBytes ? `${product.packageFileCount} files · ${Math.round(product.packageSizeBytes / 1024)} KB` : "See package details"} icon={FileText} />
+            </div>
+            <Section title="What it does">
+              <p>
+                {product.description}
+              </p>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                {benefits.map((x) => (
+                  <p
+                    key={x}
+                    className="flex gap-3 rounded-md bg-surface p-4 text-sm text-foreground"
+                  >
+                    <Check className="mt-1 shrink-0 text-success" size={16} />
+                    {x}
+                  </p>
+                ))}
+              </div>
+            </Section>
+            <Section title="Ideal use cases">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {(product.useCases ?? []).map((useCase) => (
+                  <div key={useCase.title} className="border-l-2 border-primary/40 pl-4">
+                    <h3 className="font-semibold text-foreground">{useCase.title}</h3>
+                    <p className="mt-1 text-sm">{useCase.description}</p>
+                  </div>
+                ))}
+              </div>
+            </Section>
+            <Section title="What’s included">
+              <div className="overflow-hidden rounded-lg border bg-surface">
+                {included.map((file) => (
+                  <div
+                    className="grid gap-1 border-b p-4 last:border-0 sm:grid-cols-[12rem_1fr]"
+                    key={file.name}
+                  >
+                    <code className="font-mono text-xs text-foreground">
+                      {file.name}
+                    </code>
+                    <span className="text-sm">{file.description}</span>
+                  </div>
+                ))}
+              </div>
+            </Section>
+            <Section title="Example input and output">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="eyebrow">Input</p>
+                  <pre className="mt-2 whitespace-pre-wrap rounded-lg border bg-surface p-4 font-mono text-xs leading-6">
+                    {product.exampleInput}
+                  </pre>
+                </div>
+                <div>
+                  <p className="eyebrow">Output excerpt</p>
+                  <div className="mt-2 rounded-lg bg-foreground p-5 text-background">
+                    <p className="editorial text-2xl">
+                      {product.exampleOutputTitle}
+                    </p>
+                    <p className="mt-2 text-sm text-background/70">
+                      {product.exampleOutputBody}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Section>
+            <Section title="Installation and usage">
+              <ol className="space-y-4">
+                {product.installationSteps.map((x, i) => (
+                  <li key={x} className="flex gap-4">
+                    <span className="font-mono text-xs text-primary">
+                      0{i + 1}
+                    </span>
+                    <span>{x}</span>
+                  </li>
+                ))}
+              </ol>
+              <pre className="mt-6 overflow-x-auto rounded-lg bg-foreground p-4 font-mono text-xs text-background">
+                cp -R {product.slug} ~/.agents/skills/
+              </pre>
+            </Section>
+            <Section title="Version history">
+              <div className="space-y-6">
+                {versions.map((v, i) => (
+                  <div
+                    key={v.version}
+                    className="grid gap-2 sm:grid-cols-[7rem_9rem_1fr]"
+                  >
+                    <code className="font-mono text-xs text-foreground">
+                      v{v.version}
+                      {i === 0 && " · latest"}
+                    </code>
+                    <span className="text-xs">{new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(v.releasedAt))}</span>
+                    <p className="text-sm">{v.notes}</p>
+                  </div>
+                ))}
+              </div>
+            </Section>
+            <Section title={`Reviews · ${product.rating}`} id="reviews">
+              <div className="space-y-6">
+                {reviews.map((r) => (
+                  <article key={r.id} className="border-b pb-6">
+                    <div className="flex justify-between gap-3">
+                      <div>
+                        <strong className="text-sm text-foreground">
+                          {r.author}
+                        </strong>
+                        <p className="mt-1 text-xs">
+                          <Rating rating={r.rating} /> · {new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(r.createdAt))}
+                        </p>
+                      </div>
+                      {r.verifiedPurchase && (
+                        <Badge variant="success">Verified purchase</Badge>
+                      )}
+                    </div>
+                    <p className="mt-3 max-w-2xl">{r.body}</p>
+                  </article>
+                ))}
+              </div>
+            </Section>
+            <Section title="About the creator">
+              <div className="rounded-lg border bg-surface p-6">
+                <CreatorIdentity creator={product.creator} />
+                <p className="mt-4 max-w-2xl">
+                  {product.creator.bio} Every release includes examples, a
+                  migration-aware changelog, and direct support for documented
+                  issues.
+                </p>
+                <p className="mt-4 text-xs font-semibold text-foreground">
+                  {product.creator.products} products · {product.creator.followers.toLocaleString()} followers
+                </p>
+              </div>
+            </Section>
+          </div>
+          <aside>
+            <div className="sticky top-24 space-y-5 rounded-xl border border-border-strong bg-surface-raised p-5 shadow-soft">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  One-time license
+                </p>
+                <p className="mt-1 text-3xl font-semibold">{product.pricing.model === "free" ? "Free" : new Intl.NumberFormat("en-US", { style: "currency", currency: product.pricing.currency }).format(product.pricing.amountMinor / 100)}</p>
+              </div>
+              <ProductActions product={product} />
+              <div className="border-t pt-5">
+                <p className="eyebrow">Compatibility</p>
+                <div className="mt-3">
+                  <CompatibilityBadges
+                    compatibility={product.compatibility}
+                    limit={5}
+                  />
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Models: Claude 4, GPT-5
+                </p>
+              </div>
+              <TrustRow
+                icon={Download}
+                title="Requirements"
+                text={product.requirements ?? "See documentation"}
+              />
+              <TrustRow
+                icon={KeyRound}
+                title="Permissions"
+                text={product.permissions ?? "See permission disclosure"}
+              />
+              <TrustRow
+                icon={ShieldCheck}
+                title="Safety verification"
+                text="Package scan passed · Aug 18"
+                good
+              />
+              <TrustRow
+                icon={FileText}
+                title="License"
+                text={product.license ?? "See license"}
+              />
+              <TrustRow
+                icon={RefreshCw}
+                title="Updates"
+                text={product.updatesPolicy ?? "See update policy"}
+              />
+              <TrustRow
+                icon={LockKeyhole}
+                title="Refunds"
+                text={product.refundPolicy ?? "See refund policy"}
+              />
+            </div>
+          </aside>
+        </div>
+        <section className="mt-12 border-t pt-12">
+          <p className="eyebrow">Keep building</p>
+          <h2 className="editorial mt-2 text-4xl">Related products</h2>
+          <div className="mt-7 grid gap-5 md:grid-cols-3">
+            {product.related.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+function Meta({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: typeof RefreshCw;
+}) {
+  return (
+    <div className="bg-surface p-4">
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Icon size={14} />
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-xs font-semibold">{value}</p>
+    </div>
+  );
+}
+function TrustRow({
+  icon: Icon,
+  title,
+  text,
+  good,
+}: {
+  icon: typeof RefreshCw;
+  title: string;
+  text: string;
+  good?: boolean;
+}) {
+  return (
+    <div className="border-t pt-4">
+      <p className="flex items-center gap-2 text-xs font-semibold">
+        <Icon
+          size={15}
+          className={good ? "text-success" : "text-muted-foreground"}
+        />
+        {title}
+        {good && <CheckCircle2 size={13} className="text-success" />}
+      </p>
+      <p className="mt-1 pl-6 text-xs leading-5 text-muted-foreground">
+        {text}
+      </p>
+    </div>
+  );
+}

@@ -1,0 +1,431 @@
+// Prisma schema for the blog platform
+// PostgreSQL database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Author
+// ---------------------------------------------------------------------------
+model Author {
+  id        String    @id @default(cuid())
+  name      String
+  bio       String?
+  avatarUrl String?
+  createdAt DateTime  @default(now())
+  articles  Article[]
+
+  @@index([name])
+}
+
+// ---------------------------------------------------------------------------
+// Category
+// ---------------------------------------------------------------------------
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  articles    Article[]
+
+  @@index([name])
+}
+
+// ---------------------------------------------------------------------------
+// Article
+// ---------------------------------------------------------------------------
+model Article {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String
+  heroImage   String?
+  published   Boolean  @default(false)
+  publishedAt DateTime?
+  scheduledAt DateTime?
+  previewToken String?  @unique
+  seriesOrder Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  authorId   String
+  author     Author   @relation(fields: [authorId], references: [id])
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  seriesId  String?
+  series    Series?   @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  tags      ArticleTag[]
+  revisions ArticleRevision[]
+  comments  Comment[]
+  bookmarks ReaderBookmark[]
+  readingProgress ReaderReadingProgress[]
+  editions   EditionArticle[]
+
+  @@index([slug])
+  @@index([published])
+  @@index([publishedAt])
+  @@index([categoryId])
+  @@index([authorId])
+  @@index([seriesId, seriesOrder])
+  @@index([scheduledAt])
+  @@index([published, publishedAt])
+}
+
+model Tag {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  articles    ArticleTag[]
+
+  @@index([name])
+}
+
+model ArticleTag {
+  articleId String
+  tagId     String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@index([tagId])
+}
+
+model Series {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  articles    Article[]
+
+  @@index([name])
+}
+
+model ArticleRevision {
+  id        String   @id @default(cuid())
+  articleId String
+  snapshot  Json
+  createdAt DateTime @default(now())
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId, createdAt])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  url       String
+  altText   String
+  mimeType  String
+  size      Int
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model MarkdownResource {
+  id           String    @id @default(cuid())
+  title        String
+  slug         String    @unique
+  description  String
+  category     String
+  fileName     String
+  content      String
+  size         Int
+  published    Boolean   @default(false)
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([published, publishedAt])
+  @@index([category])
+}
+
+model Edition {
+  id            String           @id @default(cuid())
+  number        Int              @unique
+  title         String
+  slug          String           @unique
+  description   String
+  editorialNote String?
+  coverImage    String?
+  accentColor   String           @default("#b45309")
+  published     Boolean          @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  articles      EditionArticle[]
+
+  @@index([published, publishedAt])
+}
+
+model EditionArticle {
+  editionId String
+  articleId String
+  position  Int
+  edition   Edition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, articleId])
+  @@unique([editionId, position])
+  @@index([articleId])
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  articleId  String
+  name       String
+  email      String
+  body       String
+  approved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  approvedAt DateTime?
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId, approved, createdAt])
+  @@index([approved, createdAt])
+}
+
+model SearchQuery {
+  id           String   @id @default(cuid())
+  query        String   @unique
+  count        Int      @default(1)
+  lastSearched DateTime @default(now())
+
+  @@index([count, lastSearched])
+}
+
+// ---------------------------------------------------------------------------
+// NewsletterSubscriber
+// ---------------------------------------------------------------------------
+model NewsletterSubscriber {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  active       Boolean  @default(true)
+  subscribedAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([active])
+  @@index([subscribedAt])
+}
+
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sessions     AdminSession[]
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  userId    String
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ReaderUser {
+  id           String                  @id @default(cuid())
+  email        String                  @unique
+  passwordHash String?
+  googleSubject String?                @unique
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  sessions    ReaderSession[]
+  bookmarks   ReaderBookmark[]
+  progress    ReaderReadingProgress[]
+  productFavorites MarketplaceFavorite[]
+  marketplaceOrders MarketplaceOrder[]
+}
+
+model ReaderSession {
+  id        String     @id @default(cuid())
+  tokenHash String     @unique
+  expiresAt DateTime
+  createdAt DateTime   @default(now())
+  userId    String
+  user      ReaderUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ReaderBookmark {
+  userId    String
+  articleId String
+  createdAt DateTime   @default(now())
+  user      ReaderUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   Article    @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, articleId])
+  @@index([userId, createdAt])
+  @@index([articleId])
+}
+
+model ReaderReadingProgress {
+  userId    String
+  articleId String
+  percentage Int       @default(0)
+  visitedAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  user      ReaderUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   Article     @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, articleId])
+  @@index([userId, visitedAt])
+  @@index([articleId])
+}
+
+model MarketplaceCreator {
+  id        String   @id @default(cuid())
+  name      String
+  handle    String   @unique
+  initials  String
+  verified Boolean  @default(false)
+  bio       String
+  followers Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  products  MarketplaceProduct[]
+
+  @@index([verified, followers])
+}
+
+model MarketplaceCategory {
+  id       String   @id @default(cuid())
+  name     String
+  slug     String   @unique
+  position Int      @default(0)
+  products MarketplaceProduct[]
+
+  @@index([position, name])
+}
+
+model MarketplaceProduct {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  name               String
+  type               String
+  outcome            String
+  description        String
+  priceMinor         Int
+  currency           String   @default("USD")
+  pricingModel       String
+  platforms          String[]
+  models             String[]
+  rating             Decimal  @default(0) @db.Decimal(2, 1)
+  reviewCount        Int      @default(0)
+  usageCount         Int      @default(0)
+  purchaseCount      Int      @default(0)
+  version            String
+  featured           Boolean  @default(false)
+  trending           Boolean  @default(false)
+  verified           Boolean  @default(false)
+  tags               String[]
+  packageFileCount   Int?
+  packageSizeBytes   Int?
+  benefits           String[]
+  useCases           Json?
+  includedFiles      Json?
+  exampleInput       String?
+  exampleOutputTitle String?
+  exampleOutputBody  String?
+  installationSteps  String[]
+  previewFiles       String[]
+  previewExcerpt     String?
+  requirements       String?
+  permissions        String?
+  license             String?
+  updatesPolicy      String?
+  refundPolicy        String?
+  published          Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  creatorId          String
+  creator            MarketplaceCreator @relation(fields: [creatorId], references: [id])
+  categoryId         String
+  category            MarketplaceCategory @relation(fields: [categoryId], references: [id])
+  versions           MarketplaceProductVersion[]
+  reviews            MarketplaceReview[]
+  favorites          MarketplaceFavorite[]
+  orders             MarketplaceOrder[]
+
+  @@index([published, featured, usageCount])
+  @@index([published, type])
+  @@index([published, categoryId])
+  @@index([published, verified])
+  @@index([updatedAt])
+}
+
+model MarketplaceProductVersion {
+  id        String   @id @default(cuid())
+  productId String
+  version   String
+  notes     String
+  releasedAt DateTime
+  product   MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, version])
+  @@index([productId, releasedAt])
+}
+
+model MarketplaceReview {
+  id               String   @id @default(cuid())
+  productId        String
+  author           String
+  rating           Int
+  body             String
+  verifiedPurchase Boolean  @default(false)
+  published        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  product          MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, published, createdAt])
+}
+
+model MarketplaceFavorite {
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+  user      ReaderUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+  @@index([userId, createdAt])
+  @@index([productId])
+}
+
+model MarketplaceOrder {
+  id             String   @id @default(cuid())
+  userId         String
+  productId      String
+  idempotencyKey String   @unique
+  amountMinor    Int
+  currency       String
+  status         String
+  providerRef    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           ReaderUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product        MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([productId, status])
+}

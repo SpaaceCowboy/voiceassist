@@ -1,0 +1,21 @@
+import { Router } from "express";
+import { addBookmark, changeReaderPassword, getReaderLibrary, getReaderProfile, getReaderSession, loginReader, loginReaderWithGoogle, logoutReader, registerReader, removeBookmark, saveProgress, syncReaderLibrary } from "../controllers/readerController.js";
+import { requireReader } from "../middleware/auth.js";
+import { loginRateLimit } from "../middleware/security.js";
+import { validate } from "../middleware/validate.js";
+import { googleCredentialSchema, readerCredentialsSchema, readerLibrarySyncSchema, readerPasswordChangeSchema, readerProgressSchema } from "../validation/schemas.js";
+
+const router = Router();
+router.post("/register", loginRateLimit, validate(readerCredentialsSchema), registerReader);
+router.post("/login", loginRateLimit, validate(readerCredentialsSchema), loginReader);
+router.post("/google", loginRateLimit, validate(googleCredentialSchema), loginReaderWithGoogle);
+router.post("/logout", requireReader, logoutReader);
+router.get("/session", requireReader, getReaderSession);
+router.get("/profile", requireReader, getReaderProfile);
+router.put("/profile/password", requireReader, loginRateLimit, validate(readerPasswordChangeSchema), changeReaderPassword);
+router.get("/library", requireReader, getReaderLibrary);
+router.post("/library/sync", requireReader, validate(readerLibrarySyncSchema), syncReaderLibrary);
+router.put("/articles/:slug/bookmark", requireReader, addBookmark);
+router.delete("/articles/:slug/bookmark", requireReader, removeBookmark);
+router.put("/articles/:slug/progress", requireReader, validate(readerProgressSchema), saveProgress);
+export default router;
