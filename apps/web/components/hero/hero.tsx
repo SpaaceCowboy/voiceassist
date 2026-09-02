@@ -5,18 +5,11 @@ import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 import { PlasmaField } from "./plasma-field";
 import { HeroScene } from "./hero-scene";
 import { DecodeText } from "@/components/motion/decode-text";
-import { CountUp } from "@/components/motion/count-up";
 import { Magnetic } from "@/components/motion/magnetic";
 import { Marquee } from "@/components/motion/marquee";
 import { buttonVariants } from "@/components/ui/button";
 import { useScrollProgress } from "@/lib/hooks/use-scroll-progress";
 import { useLocale } from "@/lib/locale-context";
-
-const STATS = [
-  { value: 2847, suffix: "", label: "building blocks listed" },
-  { value: 190, suffix: "k", label: "installs this year" },
-  { value: 100, suffix: "%", label: "permissions declared" },
-] as const;
 
 const PLATFORMS = [
   "Claude",
@@ -48,7 +41,8 @@ export function Hero() {
         aria-hidden
         className="grid-field absolute inset-0 -z-10 opacity-60"
         style={{
-          maskImage: "radial-gradient(120% 90% at 50% 0%, black, transparent 72%)",
+          maskImage:
+            "radial-gradient(120% 90% at 50% 0%, black, transparent 72%)",
         }}
       />
       {/* Readability scrim. The field is deliberately quiet, but "quiet" is a
@@ -127,23 +121,6 @@ export function Hero() {
             <ShieldCheck size={15} className="text-verified" />
             {t.declared}
           </p>
-
-          {/* --- live stat rail --------------------------------------------- */}
-          <dl className="mt-10 grid max-w-lg grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border">
-            {STATS.map((stat) => (
-              <div key={stat.label} className="bg-background/70 p-4 backdrop-blur">
-                <dt className="sr-only">{stat.label}</dt>
-                <dd>
-                  <span className="block font-mono text-2xl font-semibold tracking-tight">
-                    <CountUp value={stat.value} suffix={stat.suffix} />
-                  </span>
-                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                    {stat.label}
-                  </span>
-                </dd>
-              </div>
-            ))}
-          </dl>
         </div>
 
         {/* --- 3D scene ----------------------------------------------------- */}
@@ -155,7 +132,9 @@ export function Hero() {
       {/* --- platform ticker ------------------------------------------------ */}
       <div className="relative border-t border-border/70 bg-background/50 py-4 backdrop-blur">
         <div className="container-page flex items-center gap-6">
-          <span className="eyebrow hidden shrink-0 sm:block">{t.worksWith}</span>
+          <span className="eyebrow hidden shrink-0 sm:block">
+            {t.worksWith}
+          </span>
           <Marquee duration={38} className="min-w-0 flex-1">
             {PLATFORMS.map((platform) => (
               <span
