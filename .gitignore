@@ -39,3 +39,16 @@ Thumbs.db
 
 # session scratch planning (not project docs)
 tasks.md
+
+# maintenance screenshots and notes (session scratch, not project docs)
+maintenance/
+
+# local tooling and agent harness state
+.cursor/
+.claude/
+.turbo/
+
+# additional local artifacts
+build/
+*.log
+*.local
