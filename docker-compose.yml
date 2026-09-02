@@ -52,6 +52,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+      args:
+        API_URL: ${WEB_BUILD_API_URL:-http://api:4001}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -67,6 +69,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.blog
+      args:
+        API_URL: ${BLOG_BUILD_API_URL:-http://api:4001}
     restart: unless-stopped
     environment:
       NODE_ENV: production
