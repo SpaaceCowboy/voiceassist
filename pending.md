@@ -43,3 +43,29 @@ This file tracks known improvement work that has not been completed yet. When an
 - Fetch enough related articles to retain three results after excluding the current article.
 - Point the homepage subject-browsing CTA to `/topics` rather than `/blog`.
 - Make logout idempotent so expired or invalid session cookies can still be cleared.
+
+## Bug Audit — 2026-09-02
+
+### High Priority
+
+- Populate the marketplace catalog; `MarketplaceProduct`, `MarketplaceCreator` and `MarketplaceCategory` are all empty, so `/explore` correctly reports zero products and the homepage rails render nothing.
+- Make the API base URL runtime-configurable through a route handler or runtime config so the `/backend` rewrite destination is not frozen into `.next/routes-manifest.json` at build time and can no longer drift from the deployed API.
+
+### Medium Priority
+
+- Surface the underlying failure in the discovery error banner instead of the single generic retry string, which renders a `429 RATE_LIMITED` response identically to a network outage, and give the banner a retry control rather than requiring a page reload.
+- Localize `features/discovery/`, the only feature with hard-coded English strings and no entries in `lib/i18n.ts`; its error, empty-state and filter copy stays English on Persian pages.
+- Localize the footer column headings and link labels, which bypass `t` entirely and remain English in Persian mode.
+- Point the footer links at their real destinations; all nine currently resolve to `/explore`.
+- Give the `Read the creator guide` button in the homepage `#creators` section an `href` or handler; it is presently a `<button>` that does nothing when clicked.
+- Make the locale switcher preserve the current path instead of swapping between `/` and `/fa`, which drops a reader on the homepage when they switch language from any subpage.
+- Restore a creator entry point in the header once seller onboarding exists; the `For creators` nav item and both `Start selling` buttons were removed because they pointed at an anchor with no product behind it.
+
+### Lower Priority
+
+- Skip the redundant client-side product request on first mount in `features/discovery/discovery-experience.tsx`; the effect refetches data the server already rendered into `initial`.
+- Fix the `react-hooks/set-state-in-effect` error and five warnings reported by `npm run lint --workspace @termspace/web` in `features/account/marketplace-session.tsx`, `features/product/product-actions.tsx` and `app/page.tsx`.
+- Add a lint step to CI and run the workflow on `development`; the current workflow triggers only on pushes to `main` and never invokes the `apps/web` lint script.
+- Copy each app's `next.config` into the runtime container image, or move the settings elsewhere, so `images.remotePatterns` and `reactStrictMode` apply at runtime rather than only at build time.
+- Remove the `CountUp` component and its tests or adopt it somewhere real; it has no production call sites after the hero stat rail was removed.
+- Pin the `apps/web` dependencies currently declared as `latest` so installs are reproducible without relying solely on `package-lock.json`.
