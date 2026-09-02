@@ -25,7 +25,7 @@ import { localePath } from "@/lib/i18n";
  */
 export function Header() {
   const { locale, t } = useLocale();
-  const NAV = [{ href: "/explore", label: t.explore }, { href: "/design-system", label: t.designSystem }, { href: "#creators", label: t.creators }] as const;
+  const NAV = [{ href: "/explore", label: t.explore }, { href: "/design-system", label: t.designSystem }] as const;
   const [isCondensed, setIsCondensed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
@@ -126,15 +126,6 @@ export function Header() {
               {session.email ?? t.signIn}
             </Link>
             <Link href={locale === "fa" ? "/" : "/fa"} className="hidden px-2 text-xs text-muted-foreground hover:text-primary sm:inline-flex">{t.language}</Link>
-            <Link
-              href="#creators"
-              className={cn(
-                buttonVariants({ size: "sm" }),
-                "hidden sm:inline-flex",
-              )}
-            >
-              {t.startSelling}
-            </Link>
             <Button
               variant="ghost"
               size="icon"
@@ -171,13 +162,6 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
-            <Link
-              href="#creators"
-              onClick={() => setIsMenuOpen(false)}
-              className={cn(buttonVariants({ size: "md" }), "mt-3")}
-            >
-              {t.startSelling}
-            </Link>
           </nav>
         </div>
       )}
