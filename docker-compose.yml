@@ -57,7 +57,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.web
       args:
-        API_URL: http://api:4001
+        API_URL: ${WEB_BUILD_API_URL:-http://api:4001}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -74,7 +74,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.blog
       args:
-        API_URL: http://api:4001
+        API_URL: ${BLOG_BUILD_API_URL:-http://api:4001}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
         NEXT_PUBLIC_IMAGE_HOSTS: ${IMAGE_HOSTS:-images.unsplash.com}
     restart: unless-stopped
