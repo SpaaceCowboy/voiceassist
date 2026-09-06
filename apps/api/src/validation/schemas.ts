@@ -64,7 +64,7 @@ export const articleQuerySchema = z.object({
   category: z.string().optional(),
   tag: z.string().optional(),
   series: z.string().optional(),
-  search: z.string().optional(),
+  search: z.string().trim().max(120).optional(),
   published: z
     .enum(["true", "false"])
     .optional()

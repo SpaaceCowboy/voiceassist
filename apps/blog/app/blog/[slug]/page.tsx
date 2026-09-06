@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SafeImage } from "@/components/SafeImage";
 import { ARTICLE_FALLBACK_IMAGE, AVATAR_FALLBACK_IMAGE } from "@/lib/images";
-import { api } from "@/lib/api";
+import { api, ApiClientError } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 import { formatDate, readingTime } from "@/lib/format";
 import { ArticleCard } from "@/components/ArticleCard";
@@ -61,7 +61,8 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
         images: article.heroImage ? [article.heroImage] : undefined,
       },
     };
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ApiClientError) || error.status !== 404) throw error;
     return {
       title: "Article not found",
       robots: { index: false, follow: false },
@@ -75,7 +76,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   let article;
   try {
     article = (await api.getArticle(slug)).data;
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ApiClientError) || error.status !== 404) throw error;
     notFound();
   }
   const displayArticle = locale === "fa" ? localizeArticleFa(article) : article;

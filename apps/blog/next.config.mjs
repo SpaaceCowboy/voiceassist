@@ -10,6 +10,12 @@ const imageHosts = (process.env.NEXT_PUBLIC_IMAGE_HOSTS ?? "images.unsplash.com"
 
 const nextConfig = {
   reactStrictMode: true,
+  async headers() {
+    return [{ source: "/:path*", headers: [
+      { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+      { key: "X-Frame-Options", value: "DENY" },
+    ] }];
+  },
   async rewrites() {
     return [{ source: "/backend/:path*", destination: `${process.env.API_URL ?? "http://localhost:4001"}/:path*` }];
   },

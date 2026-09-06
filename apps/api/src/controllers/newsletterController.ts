@@ -6,21 +6,13 @@ export async function subscribeToNewsletter(req: Request, res: Response) {
   const email = String(req.body.email).trim().toLowerCase();
 
   try {
-    const subscriber = await prisma.newsletterSubscriber.create({
+    await prisma.newsletterSubscriber.create({
       data: { email },
-      select: { id: true, email: true, subscribedAt: true },
     });
-
-    res.status(201).json({ data: subscriber });
+    res.status(202).json({ data: { submitted: true } });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      const subscriber = await prisma.newsletterSubscriber.update({
-        where: { email },
-        data: { active: true },
-        select: { id: true, email: true, subscribedAt: true },
-      });
-
-      res.json({ data: subscriber });
+      res.status(202).json({ data: { submitted: true } });
       return;
     }
 

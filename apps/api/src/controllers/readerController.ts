@@ -12,7 +12,6 @@ const cookieOptions = () => ({
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
-  ...(process.env.SESSION_COOKIE_DOMAIN ? { domain: process.env.SESSION_COOKIE_DOMAIN } : {}),
   maxAge: sessionDays * 24 * 60 * 60 * 1000,
 });
 
@@ -25,19 +24,6 @@ async function createSession(res: Response, user: { id: string; email: string })
   ]);
   res.cookie(READER_SESSION_COOKIE, token, cookieOptions());
   res.json({ data: { authenticated: true, user: { email: user.email }, expiresAt } });
-}
-
-export async function registerReader(req: Request, res: Response) {
-  const email = String(req.body.email).trim().toLowerCase();
-  if (await prisma.readerUser.findUnique({ where: { email }, select: { id: true } })) {
-    res.status(409).json({ error: { code: "EMAIL_EXISTS", message: "An account already exists for this email" } });
-    return;
-  }
-  const user = await prisma.readerUser.create({
-    data: { email, passwordHash: await hash(String(req.body.password), 12) },
-    select: { id: true, email: true },
-  });
-  await createSession(res, user);
 }
 
 export async function loginReader(req: Request, res: Response) {
@@ -94,7 +80,6 @@ export async function logoutReader(req: Request, res: Response) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    ...(process.env.SESSION_COOKIE_DOMAIN ? { domain: process.env.SESSION_COOKIE_DOMAIN } : {}),
   });
   res.status(204).send();
 }
@@ -130,6 +115,10 @@ export async function changeReaderPassword(req: Request, res: Response) {
   });
   if (!user) {
     res.status(404).json({ error: { code: "NOT_FOUND", message: "Reader account not found" } });
+    return;
+  }
+  if (!user.passwordHash) {
+    res.status(403).json({ error: { code: "PASSWORD_SETUP_REQUIRES_REAUTH", message: "Sign in again with Google before adding a password" } });
     return;
   }
   if (user.passwordHash) {

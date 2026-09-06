@@ -47,17 +47,9 @@ function toArticleSummary(article: Prisma.ArticleGetPayload<{ select: typeof art
   };
 }
 
-function toArticleDetail<T extends { tags: { tag: { id: string; name: string; slug: string } }[] }>(article: T) {
+function toArticleDetail<T extends { tags: { tag: { id: string; name: string; slug: string } }[] }>(article: T, includePreviewToken = false) {
   const { tags, previewToken: _previewToken, ...detail } = article as T & { previewToken?: string | null };
-  return { ...detail, tags: tags.map(({ tag }) => tag) };
-}
-
-async function publishDueArticles() {
-  const now = new Date();
-  await prisma.article.updateMany({
-    where: { published: false, scheduledAt: { lte: now } },
-    data: { published: true, publishedAt: now, scheduledAt: null },
-  });
+  return { ...detail, ...(includePreviewToken ? { previewToken: _previewToken ?? null } : {}), tags: tags.map(({ tag }) => tag) };
 }
 
 type ArticleQuery = {
@@ -73,8 +65,6 @@ type ArticleQuery = {
 
 export async function listArticles(req: Request, res: Response) {
   const { page, limit, category, tag, series, search, published, sort } = req.query as unknown as ArticleQuery;
-  await publishDueArticles();
-
   if (published !== true && !(await isAdminRequest(req))) {
     res.status(401).json({
       error: {
@@ -89,23 +79,18 @@ export async function listArticles(req: Request, res: Response) {
   if (search) {
     const normalizedSearch = search.trim().toLowerCase().slice(0, 120);
     if (normalizedSearch) {
-      await prisma.searchQuery.upsert({
-        where: { query: normalizedSearch },
-        create: { query: normalizedSearch },
-        update: { count: { increment: 1 }, lastSearched: new Date() },
-      });
+      const searchConfig = /[\u0600-\u06ff]/u.test(normalizedSearch) ? "simple" : "english";
+      const matches = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+        SELECT "id" FROM "Article"
+        WHERE to_tsvector(${searchConfig}::regconfig, coalesce("title", '') || ' ' || coalesce("excerpt", '') || ' ' || coalesce("content", ''))
+          @@ websearch_to_tsquery(${searchConfig}::regconfig, ${normalizedSearch})
+        ORDER BY ts_rank(
+          to_tsvector(${searchConfig}::regconfig, coalesce("title", '') || ' ' || coalesce("excerpt", '') || ' ' || coalesce("content", '')),
+          websearch_to_tsquery(${searchConfig}::regconfig, ${normalizedSearch})
+        ) DESC
+      `);
+      searchIds = matches.map(({ id }) => id);
     }
-    const matches = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-      SELECT "id" FROM "Article"
-      WHERE to_tsvector('english', coalesce("title", '') || ' ' || coalesce("excerpt", '') || ' ' || coalesce("content", ''))
-        @@ websearch_to_tsquery('english', ${search})
-      ORDER BY ts_rank(
-        to_tsvector('english', coalesce("title", '') || ' ' || coalesce("excerpt", '') || ' ' || coalesce("content", '')),
-        websearch_to_tsquery('english', ${search})
-      ) DESC
-      LIMIT 500
-    `);
-    searchIds = matches.map(({ id }) => id);
   }
 
   const where: Prisma.ArticleWhereInput = {
@@ -116,12 +101,12 @@ export async function listArticles(req: Request, res: Response) {
     ...(searchIds ? { id: { in: searchIds } } : {}),
   };
 
-  const orderBy: Prisma.ArticleOrderByWithRelationInput =
+  const orderBy: Prisma.ArticleOrderByWithRelationInput[] =
     sort === "oldest"
-      ? { publishedAt: "asc" }
+      ? [{ publishedAt: "asc" }, { id: "asc" }]
       : sort === "title"
-        ? { title: "asc" }
-        : { publishedAt: "desc" };
+        ? [{ title: "asc" }, { id: "asc" }]
+        : [{ publishedAt: "desc" }, { id: "desc" }];
 
   const skip = (page - 1) * limit;
 
@@ -152,17 +137,12 @@ export async function listArticles(req: Request, res: Response) {
 }
 
 export async function listPopularSearches(_req: Request, res: Response) {
-  const searches = await prisma.searchQuery.findMany({
-    orderBy: [{ count: "desc" }, { lastSearched: "desc" }],
-    take: 8,
-    select: { query: true, count: true },
-  });
-  res.json({ data: searches });
+  res.json({ data: [] });
 }
 
 export async function getArticleBySlug(req: Request, res: Response) {
-  await publishDueArticles();
   const slug = String(req.params.slug);
+  const isAdmin = await isAdminRequest(req);
   const article = await prisma.article.findUnique({
     where: { slug },
     select: {
@@ -177,12 +157,12 @@ export async function getArticleBySlug(req: Request, res: Response) {
     return;
   }
 
-  if (!article.published && !(await isAdminRequest(req))) {
+  if (!article.published && !isAdmin) {
     res.status(404).json({ error: { code: "NOT_FOUND", message: "Article not found" } });
     return;
   }
 
-  res.json({ data: toArticleDetail(article) });
+  res.json({ data: toArticleDetail(article, isAdmin) });
 }
 
 export async function getArticlePreview(req: Request, res: Response) {
@@ -194,7 +174,7 @@ export async function getArticlePreview(req: Request, res: Response) {
     res.status(404).json({ error: { code: "NOT_FOUND", message: "Preview not found" } });
     return;
   }
-  res.json({ data: toArticleDetail(article) });
+  res.json({ data: toArticleDetail(article, true) });
 }
 
 export async function createArticle(req: Request, res: Response) {
@@ -227,7 +207,7 @@ export async function createArticle(req: Request, res: Response) {
     select: articleSelect,
   });
 
-  res.status(201).json({ data: toArticleDetail(article) });
+  res.status(201).json({ data: toArticleDetail(article, true) });
 }
 
 export async function updateArticle(req: Request, res: Response) {
@@ -282,7 +262,7 @@ export async function updateArticle(req: Request, res: Response) {
     select: articleSelect,
   });
 
-  res.json({ data: toArticleDetail(article) });
+  res.json({ data: toArticleDetail(article, true) });
 }
 
 export async function listArticleRevisions(req: Request, res: Response) {

@@ -24,12 +24,10 @@ Install all dependencies with `npm install` at the repository root.
 
 Copy each package's `.env.example` to `.env` before local development. Never commit secrets or local `.env` files.
 
-For production on sibling subdomains (for example `www.example.com` and
-`blog.example.com`), configure the API's `SESSION_COOKIE_DOMAIN` as
-`.example.com`. This is required for the shared reader login cookie;
-`.localhost` is not valid for local browser testing, so leave the setting empty
-locally. Keep both frontends on `NEXT_PUBLIC_API_URL=/backend` and route that
-path to the shared API so authentication remains same-origin from each browser.
+Keep reader session cookies host-only in production; do not widen them to a
+parent domain shared by sibling subdomains. Keep both frontends on
+`NEXT_PUBLIC_API_URL=/backend` and route that path to the shared API so
+authentication remains same-origin from each browser.
 
 ## Coding Style & Naming Conventions
 

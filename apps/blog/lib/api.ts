@@ -107,8 +107,10 @@ export const api = {
     });
   },
 
-  async getArticlePreview(token: string): Promise<ArticleDetailResponse> {
-    return apiFetch<ArticleDetailResponse>(`/api/articles/preview/${encodeURIComponent(token)}`);
+  async getArticlePreview(token: string, options: { cookie?: string } = {}): Promise<ArticleDetailResponse> {
+    return apiFetch<ArticleDetailResponse>(`/api/articles/preview/${encodeURIComponent(token)}`, {
+      headers: options.cookie ? { Cookie: options.cookie } : undefined,
+    });
   },
 
   async listPopularSearches(): Promise<{ data: { query: string; count: number }[] }> {
@@ -282,8 +284,8 @@ export const api = {
     return apiFetch<void>(`/api/comments/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
 
-  async subscribeToNewsletter(email: string): Promise<{ data: { id: string; email: string; subscribedAt: string } }> {
-    return apiFetch<{ data: { id: string; email: string; subscribedAt: string } }>("/api/newsletter/subscribers", {
+  async subscribeToNewsletter(email: string): Promise<{ data: { submitted: true } }> {
+    return apiFetch<{ data: { submitted: true } }>("/api/newsletter/subscribers", {
       method: "POST",
       body: JSON.stringify({ email }),
     });
@@ -298,10 +300,6 @@ export const api = {
 
   async logoutAdmin(): Promise<void> {
     return apiFetch<void>("/api/admin/logout", { method: "POST" });
-  },
-
-  async registerReader(email: string, password: string): Promise<{ data: ReaderSession }> {
-    return apiFetch<{ data: ReaderSession }>("/api/readers/register", { method: "POST", body: JSON.stringify({ email, password }) });
   },
 
   async loginReader(email: string, password: string): Promise<{ data: ReaderSession }> {

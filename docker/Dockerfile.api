@@ -29,7 +29,9 @@ COPY --from=build /app/apps/api/package.json apps/api/package.json
 COPY --from=build /app/apps/api/node_modules apps/api/node_modules
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/prisma apps/api/prisma
-RUN mkdir -p apps/api/uploads
+RUN mkdir -p apps/api/uploads \
+  && chown -R node:node /app
 
 EXPOSE 4001
+USER node
 CMD ["node", "apps/api/dist/index.js"]

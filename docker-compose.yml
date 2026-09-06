@@ -3,11 +3,11 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-blog_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blog_password}
-      POSTGRES_DB: ${POSTGRES_DB:-blog_db}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     ports:
-      - "${DB_HOST_PORT:-5433}:5432"
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
     volumes:
       - blog_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,21 +24,25 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4001
-      DATABASE_URL: postgresql://${POSTGRES_USER:-blog_user}:${POSTGRES_PASSWORD:-blog_password}@db:5432/${POSTGRES_DB:-blog_db}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}?schema=public
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
-      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-this-password}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       READER_SESSION_DAYS: ${READER_SESSION_DAYS:-30}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
       MEDIA_PUBLIC_URL: ${MEDIA_PUBLIC_URL:-http://localhost:4001/media}
       IMAGE_HOSTS: ${IMAGE_HOSTS:-images.unsplash.com}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "${API_HOST_PORT:-4001}:4001"
+      - "127.0.0.1:${API_HOST_PORT:-4001}:4001"
     volumes:
       - api_uploads:/app/apps/api/uploads
     command: ["sh", "-c", "npm run prisma:deploy --workspace @termspace/api && npm run start --workspace @termspace/api"]
@@ -52,6 +56,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+      args:
+        API_URL: ${WEB_BUILD_API_URL:-http://api:4001}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -61,12 +67,16 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "${WEB_HOST_PORT:-3000}:3000"
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
 
   blog:
     build:
       context: .
       dockerfile: docker/Dockerfile.blog
+      args:
+        API_URL: ${BLOG_BUILD_API_URL:-http://api:4001}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        NEXT_PUBLIC_IMAGE_HOSTS: ${IMAGE_HOSTS:-images.unsplash.com}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -78,7 +88,20 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "${BLOG_HOST_PORT:-3001}:3001"
+      - "127.0.0.1:${BLOG_HOST_PORT:-3001}:3001"
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}?schema=public
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["sh", "-c", "while true; do node apps/api/dist/jobs/publishScheduled.js; sleep 60; done"]
 
 volumes:
   blog_pgdata:

@@ -129,9 +129,13 @@ model MediaAsset {
   size      Int
   width     Int?
   height    Int?
+  deletionRequestedAt DateTime?
+  deletedAt DateTime?
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+  @@index([url])
+  @@index([deletionRequestedAt, deletedAt])
 }
 
 model MarkdownResource {
@@ -428,4 +432,5 @@ model MarketplaceOrder {
 
   @@index([userId, createdAt])
   @@index([productId, status])
+  @@unique([userId, productId])
 }

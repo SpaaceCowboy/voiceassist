@@ -25,7 +25,7 @@ const router = Router();
 
 router.get("/", validate(articleQuerySchema, "query"), listArticles);
 router.get("/search/popular", listPopularSearches);
-router.get("/preview/:token", getArticlePreview);
+router.get("/preview/:token", requireAdmin, getArticlePreview);
 router.get("/:id/revisions", requireAdmin, listArticleRevisions);
 router.post("/:id/revisions/:revisionId/restore", requireAdmin, restoreArticleRevision);
 router.post("/:slug/comments", commentRateLimit, validate(commentSchema), createComment);

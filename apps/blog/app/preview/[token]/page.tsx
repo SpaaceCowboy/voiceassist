@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, ApiClientError } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
+import { getAdminCookieHeader } from "@/lib/serverApi";
 
 export const metadata = { title: "Article preview", robots: { index: false, follow: false } };
 export const revalidate = 0;
@@ -10,8 +11,9 @@ export default async function PreviewPage({ params }: { params: Promise<{ token:
   const { token } = await params;
   let article;
   try {
-    article = (await api.getArticlePreview(token)).data;
-  } catch {
+    article = (await api.getArticlePreview(token, { cookie: await getAdminCookieHeader() })).data;
+  } catch (error) {
+    if (!(error instanceof ApiClientError) || error.status !== 404) throw error;
     notFound();
   }
 

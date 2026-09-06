@@ -1,12 +1,20 @@
 FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
+ARG API_URL=http://localhost:4001
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=
+ARG NEXT_PUBLIC_IMAGE_HOSTS=images.unsplash.com
+ENV API_URL=$API_URL
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_IMAGE_HOSTS=$NEXT_PUBLIC_IMAGE_HOSTS
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/blog/package.json apps/blog/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN npm ci
 COPY apps/blog apps/blog
+ARG API_URL=http://localhost:4001
+ENV API_URL=$API_URL
 RUN npm run build --workspace @termspace/blog
 
 FROM node:22-bookworm-slim AS runtime
@@ -17,7 +25,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/blog/package.json apps/blog/package.json
 COPY --from=build /app/apps/blog/.next apps/blog/.next
 COPY --from=build /app/apps/blog/public apps/blog/public
+RUN chown -R node:node /app
 
 EXPOSE 3001
+USER node
 CMD ["npm", "run", "start", "--workspace", "@termspace/blog"]
-

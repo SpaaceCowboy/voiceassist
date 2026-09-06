@@ -39,14 +39,15 @@ npm run build
 
 ## Run the complete stack with Docker
 
-Docker Compose runs PostgreSQL, the shared API, the main site, and Blog:
+Docker Compose runs PostgreSQL, the shared API, the scheduled-publishing worker,
+the main site, and Blog:
 
 ```bash
-cp .env.example .env # optional; defaults are suitable only for local testing
+cp .env.example .env # required; replace the example database/admin passwords
 npm run docker:up
 ```
 
-The services are available at `http://localhost:3000` (main site),
+The services are bound to loopback and available at `http://localhost:3000` (main site),
 `http://localhost:3001` (Blog), and `http://localhost:4001/api/health` (API).
 The API container applies committed Prisma migrations before starting. Persistent
 PostgreSQL data is stored in the `blog_pgdata` volume and local media uploads in
@@ -57,11 +58,11 @@ If a host port is already in use, set `DB_HOST_PORT`, `API_HOST_PORT`,
 do not change. For example, `DB_HOST_PORT=55433 WEB_HOST_PORT=3100` lets the
 stack coexist with an older local database and frontend.
 
-For production, provide a real `.env` without committing it. Set a strong
-`ADMIN_PASSWORD`, production `CORS_ORIGINS`, `MEDIA_PUBLIC_URL`, and
-`SESSION_COOKIE_DOMAIN=.your-domain.com` when the main site and Blog use sibling
-subdomains. Put TLS and public routing in a reverse proxy in front of the three
-HTTP services; do not expose PostgreSQL publicly.
+For production, provide a real `.env` without committing it. Set strong database
+and administrator passwords, production `CORS_ORIGINS`, `MEDIA_PUBLIC_URL`, and
+the exact reverse-proxy hop count in `TRUST_PROXY`. Put TLS and public routing in
+a reverse proxy in front of the three HTTP services. PostgreSQL is bound to
+loopback by default and must not be exposed publicly.
 
 The API is shared infrastructure, but its route modules remain separated by
 domain. Existing article, reader, newsletter, and editorial routes serve the
@@ -73,7 +74,7 @@ as Blog: English uses `/`, while Persian uses `/fa` (for example `/fa/explore`
 and `/fa/account`). The web proxy strips the locale prefix internally, sets the
 request locale, and applies RTL document direction and Persian typography.
 
-## Production subdomain deployment and shared login
+## Production subdomain deployment
 
 The intended production layout is one parent domain with two Next.js surfaces,
 for example:
@@ -85,16 +86,13 @@ api.example.com   -> apps/api (or an internal API service behind both proxies)
 ```
 
 Both frontends call the same `/api/readers/*` endpoints and use the same
-`ReaderUser` and `ReaderSession` records. Browser requests go through each
-frontend's same-origin `/backend/*` rewrite, so credentials are sent without
-exposing the API host to client code. The API must be configured with
-`SESSION_COOKIE_DOMAIN=.example.com` in production. This makes the
-`term_academy_reader` HttpOnly cookie valid on both `www` and `blog`; do not set
-this to `.localhost` during local development. `SameSite=Lax` is intentional:
-the two HTTPS subdomains are same-site, while the cookie remains unavailable to
-JavaScript.
+`ReaderUser` records. Browser requests go through each frontend's same-origin
+`/backend/*` rewrite. Reader cookies are deliberately host-only so a compromised
+or dangling sibling subdomain cannot receive them; users therefore authenticate
+separately on each frontend until a controlled one-time token exchange is added.
+`SameSite=Lax` remains intentional and the cookie is unavailable to JavaScript.
 
-Set `API_URL` on each server to the internal API address and include the public
+Set `API_URL` at frontend build time to the internal API address and include the public
 frontend origins in `CORS_ORIGINS` when the API is reachable cross-origin (for
 example `https://www.example.com,https://blog.example.com`). Keep
 `NEXT_PUBLIC_API_URL=/backend` in both frontends so browser calls remain

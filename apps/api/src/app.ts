@@ -17,7 +17,7 @@ import resourceRoutes from "./routes/resourceRoutes.js";
 import editionRoutes from "./routes/editionRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { apiRateLimit } from "./middleware/security.js";
+import { apiRateLimit, csrfProtection } from "./middleware/security.js";
 import { prisma } from "./lib/prisma.js";
 
 export function createApp() {
@@ -51,6 +51,7 @@ export function createApp() {
     }),
   );
   app.use(apiRateLimit);
+  app.use(csrfProtection);
 
   // Health check
   app.get("/api/health", async (_req, res) => {

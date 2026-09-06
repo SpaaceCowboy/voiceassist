@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
 const productInclude = {
@@ -129,14 +130,36 @@ export async function acquireMarketplaceProduct(req: Request, res: Response) {
     res.json({ data: existing });
     return;
   }
+  const existingEntitlement = await prisma.marketplaceOrder.findUnique({
+    where: { userId_productId: { userId: res.locals.reader.id, productId: product.id } },
+  });
+  if (existingEntitlement) {
+    res.json({ data: existingEntitlement });
+    return;
+  }
   if (product.priceMinor > 0 || product.pricingModel !== "free") {
     res.status(503).json({ error: { code: "PAYMENT_PROVIDER_NOT_CONFIGURED", message: "Paid checkout is not available yet" } });
     return;
   }
-  const order = await prisma.$transaction(async (tx) => {
-    const created = await tx.marketplaceOrder.create({ data: { userId: res.locals.reader.id, productId: product.id, idempotencyKey: key, amountMinor: 0, currency: product.currency, status: "completed" } });
-    await tx.marketplaceProduct.update({ where: { id: product.id }, data: { purchaseCount: { increment: 1 }, usageCount: { increment: 1 } } });
-    return created;
-  });
-  res.status(201).json({ data: order });
+  try {
+    const order = await prisma.$transaction(async (tx) => {
+      const created = await tx.marketplaceOrder.create({ data: { userId: res.locals.reader.id, productId: product.id, idempotencyKey: key, amountMinor: 0, currency: product.currency, status: "completed" } });
+      await tx.marketplaceProduct.update({ where: { id: product.id }, data: { purchaseCount: { increment: 1 }, usageCount: { increment: 1 } } });
+      return created;
+    });
+    res.status(201).json({ data: order });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const [sameKey, sameEntitlement] = await Promise.all([
+      prisma.marketplaceOrder.findUnique({ where: { idempotencyKey: key } }),
+      prisma.marketplaceOrder.findUnique({ where: { userId_productId: { userId: res.locals.reader.id, productId: product.id } } }),
+    ]);
+    const existing = sameKey ?? sameEntitlement;
+    if (!existing) throw error;
+    if (sameKey && (sameKey.userId !== res.locals.reader.id || sameKey.productId !== product.id)) {
+      res.status(409).json({ error: { code: "IDEMPOTENCY_CONFLICT", message: "Idempotency key was already used for another acquisition" } });
+      return;
+    }
+    res.json({ data: existing });
+  }
 }

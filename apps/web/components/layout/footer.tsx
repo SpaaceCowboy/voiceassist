@@ -7,7 +7,7 @@ import { localePath } from "@/lib/i18n";
 
 const COLUMNS = [
   { heading: "Marketplace", links: ["Explore", "Collections", "New releases"] },
-  { heading: "Create", links: ["Start selling", "Creator guide", "Quality standards"] },
+  { heading: "Create", links: ["Creator guide", "Quality standards"] },
   { heading: "Company", links: ["About", "Journal", "Support"] },
 ] as const;
 

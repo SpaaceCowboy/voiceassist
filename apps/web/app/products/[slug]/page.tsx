@@ -68,10 +68,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <div>
             <div className="flex flex-wrap gap-2">
               <ProductTypeBadge type={product.type} />
-              <Badge variant="success">
+              {product.verified && <Badge variant="success">
                 <ShieldCheck size={12} />
                 Verified product
-              </Badge>
+              </Badge>}
             </div>
             <h1 className="editorial mt-5 max-w-3xl text-5xl font-medium leading-none sm:text-6xl">
               {product.name}
@@ -255,8 +255,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <TrustRow
                 icon={ShieldCheck}
                 title="Safety verification"
-                text="Package scan passed · Aug 18"
-                good
+                text={product.verified ? "Verified by the TermSpace review process" : "Not independently verified; review permissions before installation"}
+                good={product.verified}
               />
               <TrustRow
                 icon={FileText}
