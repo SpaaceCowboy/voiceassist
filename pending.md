@@ -31,7 +31,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Restore a creator entry point in the header once seller onboarding exists; the `For creators` nav item and both `Start selling` buttons were removed because they pointed at an anchor with no product behind it.
 
 ### Lower Priority
 

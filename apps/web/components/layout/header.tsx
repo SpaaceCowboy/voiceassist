@@ -31,7 +31,11 @@ export function Header() {
   const currentPath = locale === "fa" ? pathname.slice(3) || "/" : pathname;
   const query = searchParams.toString();
   const switchHref = `${locale === "fa" ? currentPath : localePath(currentPath, "fa")}${query ? `?${query}` : ""}`;
-  const NAV = [{ href: "/explore", label: t.explore }, { href: "/design-system", label: t.designSystem }] as const;
+  const NAV = [
+    { href: "/explore", label: t.explore },
+    { href: "/design-system", label: t.designSystem },
+    { href: "/#creators", label: t.sellWork },
+  ] as const;
   const [isCondensed, setIsCondensed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
