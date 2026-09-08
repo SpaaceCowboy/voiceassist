@@ -15,7 +15,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Convert only genuine backend 404 responses to `notFound()` on article and series pages; propagate network and server failures as retryable errors.
 - Make seed reruns preserve administrator credentials, editorial taxonomy changes, and edition ordering unless an explicit reset is requested.
 
 ### Lower Priority
