@@ -449,6 +449,7 @@ The better you read code, the faster you understand systems, the more confidentl
 
 async function main() {
   console.log("Seeding database...");
+  const resetSeed = process.env.SEED_RESET === "true";
 
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD;
@@ -459,7 +460,9 @@ async function main() {
     const passwordHash = await hash(adminPassword, 12);
     await prisma.adminUser.upsert({
       where: { email: adminEmail },
-      update: { passwordHash },
+      // Credentials are bootstrap-only. Do not rotate a live administrator's
+      // password on every ordinary seed rerun.
+      update: {},
       create: { email: adminEmail, passwordHash },
     });
     console.log(`Administrator ready: ${adminEmail}`);
@@ -491,12 +494,12 @@ async function main() {
 
   const tagRecords = [];
   for (const tag of tags) {
-    tagRecords.push(await prisma.tag.upsert({ where: { slug: tag.slug }, update: tag, create: tag }));
+    tagRecords.push(await prisma.tag.upsert({ where: { slug: tag.slug }, update: {}, create: tag }));
   }
 
   const seriesRecords = [];
   for (const item of series) {
-    seriesRecords.push(await prisma.series.upsert({ where: { slug: item.slug }, update: item, create: item }));
+    seriesRecords.push(await prisma.series.upsert({ where: { slug: item.slug }, update: {}, create: item }));
   }
 
   for (const resource of markdownResources) {
@@ -523,13 +526,15 @@ async function main() {
       await prisma.article.update({
         where: { id: existing.id },
         data: {
-          seriesId: selectedSeries.id,
-          seriesOrder: Math.floor(i / seriesRecords.length) + 1,
           previewToken: !existing.previewToken || existing.previewToken.startsWith("seed-preview-") ? randomBytes(24).toString("base64url") : existing.previewToken,
-          tags: {
-            deleteMany: {},
-            create: selectedTags.map((tag) => ({ tag: { connect: { id: tag.id } } })),
-          },
+          ...(resetSeed ? {
+            seriesId: selectedSeries.id,
+            seriesOrder: Math.floor(i / seriesRecords.length) + 1,
+            tags: {
+              deleteMany: {},
+              create: selectedTags.map((tag) => ({ tag: { connect: { id: tag.id } } })),
+            },
+          } : {}),
         },
       });
       continue;
@@ -561,6 +566,7 @@ async function main() {
     select: { id: true, slug: true },
   });
   const articleIdBySlug = new Map(editionArticles.map((article) => [article.slug, article.id]));
+  const existingEdition = await prisma.edition.findUnique({ where: { slug: "software-and-the-human-scale" }, select: { id: true } });
   const edition = await prisma.edition.upsert({
     where: { slug: "software-and-the-human-scale" },
     update: {},
@@ -576,13 +582,15 @@ async function main() {
       publishedAt: new Date(),
     },
   });
-  await prisma.editionArticle.deleteMany({ where: { editionId: edition.id } });
-  await prisma.editionArticle.createMany({
-    data: articles.slice(0, 6).flatMap((article, index) => {
-      const articleId = articleIdBySlug.get(article.slug);
-      return articleId ? [{ editionId: edition.id, articleId, position: index + 1 }] : [];
-    }),
-  });
+  if (!existingEdition || resetSeed) {
+    await prisma.editionArticle.deleteMany({ where: { editionId: edition.id } });
+    await prisma.editionArticle.createMany({
+      data: articles.slice(0, 6).flatMap((article, index) => {
+        const articleId = articleIdBySlug.get(article.slug);
+        return articleId ? [{ editionId: edition.id, articleId, position: index + 1 }] : [];
+      }),
+    });
+  }
 
   const marketplaceCreatorIds = new Map<string, string>();
   for (const creator of marketplaceCreators) {

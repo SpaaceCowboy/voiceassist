@@ -15,7 +15,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Make seed reruns preserve administrator credentials, editorial taxonomy changes, and edition ordering unless an explicit reset is requested.
 
 ### Lower Priority
 
