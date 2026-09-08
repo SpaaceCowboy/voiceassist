@@ -311,9 +311,9 @@ export default async function Home() {
                 </div>
                 <div className="flex flex-wrap gap-3 md:justify-end">
                   <Magnetic>
-                    <Button size="lg" className="shadow-plasma">
+                    <Link href={localePath("/design-system", locale)} className={`${buttonVariants({ size: "lg" })} shadow-plasma`}>
                       Read the creator guide
-                    </Button>
+                    </Link>
                   </Magnetic>
                 </div>
               </div>
