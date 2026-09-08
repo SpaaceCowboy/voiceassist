@@ -31,7 +31,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Surface the underlying failure in the discovery error banner instead of the single generic retry string, which renders a `429 RATE_LIMITED` response identically to a network outage, and give the banner a retry control rather than requiring a page reload.
 - Localize `features/discovery/`, the only feature with hard-coded English strings and no entries in `lib/i18n.ts`; its error, empty-state and filter copy stays English on Persian pages.
 - Localize the footer column headings and link labels, which bypass `t` entirely and remain English in Persian mode.
 - Point the footer links at their real destinations; all nine currently resolve to `/explore`.

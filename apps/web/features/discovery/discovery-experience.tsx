@@ -11,7 +11,7 @@ import {
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
 import type { ProductFilters, ProductPageResult, ProductType } from "@/lib/types";
-import { getProducts } from "@/lib/api";
+import { ApiError, getProducts } from "@/lib/api";
 import { ProductCard } from "@/components/marketplace/product-card";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export function DiscoveryExperience({ initial, categories, initialFilters }: { i
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
@@ -50,11 +51,16 @@ export function DiscoveryExperience({ initial, categories, initialFilters }: { i
       try {
         const next = await getProducts({ q: query, type, category, platform, price: price === "Free" ? "free" : price === "Paid" ? "paid" : undefined, verified, minRating, sort, page, limit: 12 }, controller.signal);
         setResult((current) => page === 1 ? next.data : [...current, ...next.data]); setMeta(next.meta);
-      } catch (cause) { if (!controller.signal.aborted) { console.error("Product search failed", cause); setError("Products could not be loaded. Please retry."); } }
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          console.error("Product search failed", cause);
+          setError(cause instanceof ApiError ? cause.message : "Could not reach the marketplace. Check your connection and try again.");
+        }
+      }
       finally { if (!controller.signal.aborted) setLoading(false); }
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [query, type, category, platform, price, verified, minRating, sort, page]);
+  }, [query, type, category, platform, price, verified, minRating, sort, page, retryNonce]);
   const change = (setter: (value: string) => void) => (value: string) => { setPage(1); setter(value); };
   const reset = () => {
     setPage(1);
@@ -277,7 +283,12 @@ export function DiscoveryExperience({ initial, categories, initialFilters }: { i
               view === "grid" ? "sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-1",
             )}
           >
-            {error && <p role="alert" className="col-span-full rounded-lg border border-destructive/40 p-4 text-sm text-destructive">{error}</p>}
+            {error && (
+              <div role="alert" className="col-span-full flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 p-4 text-sm text-destructive">
+                <p>{error}</p>
+                <Button variant="secondary" size="sm" onClick={() => setRetryNonce((value) => value + 1)}>Retry</Button>
+              </div>
+            )}
             {result.length ? (
               result.map((p) => (
                 <ProductCard
