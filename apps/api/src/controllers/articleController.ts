@@ -297,28 +297,48 @@ export async function listArticleRevisions(req: Request, res: Response) {
 }
 
 export async function restoreArticleRevision(req: Request, res: Response) {
-  const revision = await prisma.articleRevision.findFirst({
-    where: { id: String(req.params.revisionId), articleId: String(req.params.id) },
+  const id = String(req.params.id);
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Article" WHERE "id" = ${id} FOR UPDATE`);
+    const [revision, current] = await Promise.all([
+      tx.articleRevision.findFirst({ where: { id: String(req.params.revisionId), articleId: id } }),
+      tx.article.findUnique({ where: { id }, include: { tags: { select: { tagId: true } } } }),
+    ]);
+    if (!revision) return { kind: "revision-not-found" as const };
+    if (!current) return { kind: "article-not-found" as const };
+
+    // Preserve the state being replaced so restoring this revision can itself
+    // be undone from the revision history.
+    await tx.articleRevision.create({
+      data: { articleId: id, snapshot: JSON.parse(JSON.stringify(current)) },
+    });
+
+    const snapshot = revision.snapshot as Record<string, unknown> & { tags?: { tagId: string }[] };
+    const article = await tx.article.update({
+      where: { id },
+      data: {
+        title: String(snapshot.title), slug: String(snapshot.slug), excerpt: snapshot.excerpt as string | null,
+        content: String(snapshot.content), heroImage: snapshot.heroImage as string | null,
+        published: Boolean(snapshot.published), publishedAt: snapshot.publishedAt ? new Date(String(snapshot.publishedAt)) : null,
+        scheduledAt: snapshot.scheduledAt ? new Date(String(snapshot.scheduledAt)) : null,
+        authorId: String(snapshot.authorId), categoryId: String(snapshot.categoryId),
+        seriesId: snapshot.seriesId ? String(snapshot.seriesId) : null,
+        seriesOrder: typeof snapshot.seriesOrder === "number" ? snapshot.seriesOrder : null,
+        tags: { deleteMany: {}, create: (snapshot.tags ?? []).map(({ tagId }) => ({ tag: { connect: { id: tagId } } })) },
+      },
+      select: articleSelect,
+    });
+    return { kind: "restored" as const, article };
   });
-  if (!revision) {
+  if (result.kind === "revision-not-found") {
     res.status(404).json({ error: { code: "NOT_FOUND", message: "Revision not found" } });
     return;
   }
-  const snapshot = revision.snapshot as Record<string, unknown> & { tags?: { tagId: string }[] };
-  const article = await prisma.article.update({
-    where: { id: String(req.params.id) },
-    data: {
-      title: String(snapshot.title), slug: String(snapshot.slug), excerpt: snapshot.excerpt as string | null,
-      content: String(snapshot.content), heroImage: snapshot.heroImage as string | null,
-      published: Boolean(snapshot.published), publishedAt: snapshot.publishedAt ? new Date(String(snapshot.publishedAt)) : null,
-      scheduledAt: snapshot.scheduledAt ? new Date(String(snapshot.scheduledAt)) : null,
-      authorId: String(snapshot.authorId), categoryId: String(snapshot.categoryId),
-      seriesId: snapshot.seriesId ? String(snapshot.seriesId) : null,
-      seriesOrder: typeof snapshot.seriesOrder === "number" ? snapshot.seriesOrder : null,
-      tags: { deleteMany: {}, create: (snapshot.tags ?? []).map(({ tagId }) => ({ tag: { connect: { id: tagId } } })) },
-    },
-    select: articleSelect,
-  });
+  if (result.kind === "article-not-found") {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "Article not found" } });
+    return;
+  }
+  const article = result.article;
   res.json({ data: toArticleDetail(article) });
 }
 
