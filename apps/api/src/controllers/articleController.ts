@@ -181,9 +181,10 @@ export async function getArticlePreview(req: Request, res: Response) {
 
 export async function createArticle(req: Request, res: Response) {
   const body = req.body;
+  const published = body.published ?? false;
   const publishedAt = body.publishedAt
     ? new Date(body.publishedAt)
-    : body.published
+    : published
       ? new Date()
       : null;
 
@@ -194,9 +195,11 @@ export async function createArticle(req: Request, res: Response) {
       excerpt: body.excerpt ?? null,
       content: body.content,
       heroImage: body.heroImage ?? null,
-      published: body.published ?? false,
+      published,
       publishedAt,
-      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+      // A published article is live immediately; never retain a schedule
+      // that could later make its state ambiguous.
+      scheduledAt: published ? null : body.scheduledAt ? new Date(body.scheduledAt) : null,
       previewToken: randomBytes(24).toString("base64url"),
       authorId: body.authorId,
       categoryId: body.categoryId,
@@ -237,6 +240,12 @@ export async function updateArticle(req: Request, res: Response) {
         publishedAtUpdate = existingSnapshot.publishedAt ?? new Date();
       }
 
+      const effectivePublished = body.published ?? existingSnapshot.published;
+      const scheduledAtUpdate = body.scheduledAt !== undefined
+        ? (body.scheduledAt ? new Date(body.scheduledAt) : null)
+        : undefined;
+      const normalizedScheduledAt = effectivePublished ? null : scheduledAtUpdate;
+
       await tx.articleRevision.create({
         data: { articleId: id, snapshot: JSON.parse(JSON.stringify(existingSnapshot)) },
       });
@@ -253,7 +262,7 @@ export async function updateArticle(req: Request, res: Response) {
           ...(publishedAtUpdate !== undefined ? { publishedAt: publishedAtUpdate } : {}),
           ...(body.authorId !== undefined ? { authorId: body.authorId } : {}),
           ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
-          ...(body.scheduledAt !== undefined ? { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null } : {}),
+          ...(normalizedScheduledAt !== undefined || effectivePublished ? { scheduledAt: normalizedScheduledAt } : {}),
           ...(body.seriesId !== undefined ? { seriesId: body.seriesId } : {}),
           ...(body.seriesOrder !== undefined ? { seriesOrder: body.seriesOrder } : {}),
           ...(body.tagIds !== undefined
