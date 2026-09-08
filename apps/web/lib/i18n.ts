@@ -5,6 +5,19 @@ export function localePath(path: string, locale: Locale): string {
   return locale === "fa" ? `/fa${normalized === "/" ? "" : normalized}` : normalized;
 }
 
+export const footerLabels = {
+  en: {
+    marketplace: "Marketplace", explore: "Explore", collections: "Collections", newReleases: "New releases",
+    create: "Create", creatorGuide: "Creator guide", qualityStandards: "Quality standards",
+    company: "Company", about: "About", journal: "Journal", support: "Support", permissions: "Permissions on every listing",
+  },
+  fa: {
+    marketplace: "بازارچه", explore: "کاوش", collections: "مجموعه‌ها", newReleases: "انتشارهای تازه",
+    create: "ساختن", creatorGuide: "راهنمای سازندگان", qualityStandards: "استانداردهای کیفیت",
+    company: "شرکت", about: "درباره", journal: "مجله", support: "پشتیبانی", permissions: "مجوزها در هر فهرست",
+  },
+} as const;
+
 export const copy = {
   en: {
     language: "فارسی", explore: "Explore", designSystem: "Design system", signIn: "Sign in", close: "Close menu", open: "Open menu", primary: "Primary", mobile: "Mobile", announcement: "New: verified MCP servers with transparent permission reviews", marketplace: "The marketplace for AI building blocks", heroStop: "Stop prompting", heroScratch: "from scratch.", heroStart: "Start from what works.", heroIntro: "Prompts, skills, agents and MCP servers built by people who already got the model to behave — each one listed with its permissions, compatibility and safety review in plain sight.", exploreMarketplace: "Explore the marketplace", sellWork: "Sell your work", declared: "Every listing declares what it touches before you install it.", worksWith: "Works with", featuredEyebrow: "Chosen with care", featuredTitle: "Featured building blocks", viewAll: "View all {count} listings", unavailable: "Marketplace data is temporarily unavailable. Please try again shortly.", trustEyebrow: "Trust is product information.", collectionsEyebrow: "Curated collections", practiceEyebrow: "Browse by practice", creatorsEyebrow: "People worth following", featuredCreators: "Featured creators", inboxEyebrow: "A quieter, better inbox", inboxTitle: "One useful release every Friday.", account: "Your account", signedInAs: "Signed in as", signOut: "Sign out", accountIntro: "Use one account for the TermSpace marketplace and editorial library.", createAccount: "Create account", needAccount: "Need an account? Register", registered: "Already registered? Sign in", email: "Email", password: "Password", wait: "Please wait…", serviceError: "Account services are temporarily unavailable.", home: "Home", footer: "The marketplace for AI building blocks. Carefully made, clearly explained.", discovery: { marketplace: "Marketplace", title: "Find your next advantage.", intro: "Search trustworthy, reusable products made to improve real AI work.", search: "Search by product, outcome, or creator…", productType: "Product type", all: "All", category: "Category", compatibility: "Compatibility", pricing: "Pricing", rating: "Rating", anyRating: "Any", verifiedOnly: "Verified only", filters: "Filters", showResults: "Show {count} results", sort: "Sort products", featured: "Featured", topRated: "Top rated", recentlyUpdated: "Recently updated", priceLow: "Price: low to high", gridView: "Grid view", listView: "List view", clearAll: "Clear all", products: "products", loadMore: "Load more products", loading: "Loading…", retry: "Retry", rateLimited: "The marketplace is rate-limited. Please wait a moment and try again.", connectionError: "Could not reach the marketplace. Check your connection and try again." } },

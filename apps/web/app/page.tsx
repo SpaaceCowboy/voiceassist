@@ -175,7 +175,7 @@ export default async function Home() {
         </section>
 
         {/* --- collections (inverted, plasma-lit) ---------------------------- */}
-        <section className="relative isolate overflow-hidden border-y border-border bg-background-deep py-20 lg:py-28">
+        <section id="collections" className="relative isolate overflow-hidden border-y border-border bg-background-deep py-20 lg:py-28">
           <div
             aria-hidden
             className="absolute inset-0 -z-10 opacity-70"
