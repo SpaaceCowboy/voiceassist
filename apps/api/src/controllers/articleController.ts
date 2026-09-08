@@ -63,6 +63,8 @@ type ArticleQuery = {
   sort: "newest" | "oldest" | "title";
 };
 
+class ArticleEditConflictError extends Error {}
+
 export async function listArticles(req: Request, res: Response) {
   const { page, limit, category, tag, series, search, published, sort } = req.query as unknown as ArticleQuery;
   if (published !== true && !(await isAdminRequest(req))) {
@@ -213,56 +215,67 @@ export async function createArticle(req: Request, res: Response) {
 export async function updateArticle(req: Request, res: Response) {
   const id = String(req.params.id);
   const body = req.body;
-  let publishedAtUpdate: Date | null | undefined;
-  const existingSnapshot = await prisma.article.findUnique({
-    where: { id },
-    include: { tags: { select: { tagId: true } } },
-  });
-  if (!existingSnapshot) {
-    res.status(404).json({ error: { code: "NOT_FOUND", message: "Article not found" } });
-    return;
-  }
-  if (body.expectedUpdatedAt && existingSnapshot.updatedAt.toISOString() !== body.expectedUpdatedAt) {
-    res.status(409).json({ error: { code: "EDIT_CONFLICT", message: "This article was changed in another session. Refresh before saving." } });
-    return;
-  }
-  await prisma.articleRevision.create({
-    data: { articleId: id, snapshot: JSON.parse(JSON.stringify(existingSnapshot)) },
-  });
+  try {
+    const article = await prisma.$transaction(async (tx) => {
+      // Lock the row before reading the snapshot. This prevents two editors
+      // with the same expectedUpdatedAt from both creating revisions and
+      // overwriting each other.
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Article" WHERE "id" = ${id} FOR UPDATE`);
+      const existingSnapshot = await tx.article.findUnique({
+        where: { id },
+        include: { tags: { select: { tagId: true } } },
+      });
+      if (!existingSnapshot) return null;
+      if (body.expectedUpdatedAt && existingSnapshot.updatedAt.toISOString() !== body.expectedUpdatedAt) {
+        throw new ArticleEditConflictError();
+      }
 
-  if (body.publishedAt !== undefined) {
-    publishedAtUpdate = body.publishedAt ? new Date(body.publishedAt) : null;
-  } else if (body.published === true) {
-    const existing = await prisma.article.findUnique({
-      where: { id },
-      select: { publishedAt: true },
+      let publishedAtUpdate: Date | null | undefined;
+      if (body.publishedAt !== undefined) {
+        publishedAtUpdate = body.publishedAt ? new Date(body.publishedAt) : null;
+      } else if (body.published === true) {
+        publishedAtUpdate = existingSnapshot.publishedAt ?? new Date();
+      }
+
+      await tx.articleRevision.create({
+        data: { articleId: id, snapshot: JSON.parse(JSON.stringify(existingSnapshot)) },
+      });
+
+      return tx.article.update({
+        where: { id },
+        data: {
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.slug !== undefined ? { slug: body.slug } : {}),
+          ...(body.excerpt !== undefined ? { excerpt: body.excerpt } : {}),
+          ...(body.content !== undefined ? { content: body.content } : {}),
+          ...(body.heroImage !== undefined ? { heroImage: body.heroImage } : {}),
+          ...(body.published !== undefined ? { published: body.published } : {}),
+          ...(publishedAtUpdate !== undefined ? { publishedAt: publishedAtUpdate } : {}),
+          ...(body.authorId !== undefined ? { authorId: body.authorId } : {}),
+          ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
+          ...(body.scheduledAt !== undefined ? { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null } : {}),
+          ...(body.seriesId !== undefined ? { seriesId: body.seriesId } : {}),
+          ...(body.seriesOrder !== undefined ? { seriesOrder: body.seriesOrder } : {}),
+          ...(body.tagIds !== undefined
+            ? { tags: { deleteMany: {}, create: body.tagIds.map((tagId: string) => ({ tag: { connect: { id: tagId } } })) } }
+            : {}),
+        },
+        select: articleSelect,
+      });
     });
-    publishedAtUpdate = existing?.publishedAt ?? new Date();
+
+    if (!article) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Article not found" } });
+      return;
+    }
+    res.json({ data: toArticleDetail(article, true) });
+  } catch (error) {
+    if (error instanceof ArticleEditConflictError) {
+      res.status(409).json({ error: { code: "EDIT_CONFLICT", message: "This article was changed in another session. Refresh before saving." } });
+      return;
+    }
+    throw error;
   }
-
-  const article = await prisma.article.update({
-    where: { id },
-    data: {
-      ...(body.title !== undefined ? { title: body.title } : {}),
-      ...(body.slug !== undefined ? { slug: body.slug } : {}),
-      ...(body.excerpt !== undefined ? { excerpt: body.excerpt } : {}),
-      ...(body.content !== undefined ? { content: body.content } : {}),
-      ...(body.heroImage !== undefined ? { heroImage: body.heroImage } : {}),
-      ...(body.published !== undefined ? { published: body.published } : {}),
-      ...(publishedAtUpdate !== undefined ? { publishedAt: publishedAtUpdate } : {}),
-      ...(body.authorId !== undefined ? { authorId: body.authorId } : {}),
-      ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
-      ...(body.scheduledAt !== undefined ? { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null } : {}),
-      ...(body.seriesId !== undefined ? { seriesId: body.seriesId } : {}),
-      ...(body.seriesOrder !== undefined ? { seriesOrder: body.seriesOrder } : {}),
-      ...(body.tagIds !== undefined
-        ? { tags: { deleteMany: {}, create: body.tagIds.map((tagId: string) => ({ tag: { connect: { id: tagId } } })) } }
-        : {}),
-    },
-    select: articleSelect,
-  });
-
-  res.json({ data: toArticleDetail(article, true) });
 }
 
 export async function listArticleRevisions(req: Request, res: Response) {

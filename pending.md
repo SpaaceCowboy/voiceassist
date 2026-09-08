@@ -15,7 +15,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Make article optimistic concurrency atomic and include revision creation and the article update in one transaction.
 - Reject or normalize conflicting article publication state so `published: true` cannot coexist with a future `scheduledAt` and release scheduled content early.
 - Snapshot the current article before restoring an older revision so restoration can be undone.
 - Filter unpublished nested articles from public edition responses, or reject publishing editions that contain drafts.
