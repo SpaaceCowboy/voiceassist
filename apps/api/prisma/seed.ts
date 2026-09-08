@@ -588,7 +588,7 @@ async function main() {
   for (const creator of marketplaceCreators) {
     const record = await prisma.marketplaceCreator.upsert({
       where: { handle: creator.handle },
-      update: {},
+      update: { name: creator.name, initials: creator.initials, verified: creator.verified, bio: creator.bio, followers: creator.followers },
       create: { id: creator.id, name: creator.name, handle: creator.handle, initials: creator.initials, verified: creator.verified, bio: creator.bio, followers: creator.followers },
     });
     marketplaceCreatorIds.set(creator.handle, record.id);
@@ -598,7 +598,7 @@ async function main() {
   for (const [position, name] of marketplaceCategoryNames.filter((item) => item !== "All").entries()) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const record = await prisma.marketplaceCategory.upsert({
-      where: { slug }, update: {}, create: { name, slug, position },
+      where: { slug }, update: { name, position }, create: { name, slug, position },
     });
     marketplaceCategoryIds.set(name, record.id);
   }
@@ -617,14 +617,22 @@ async function main() {
       requirements: "Skills support or file upload", permissions: "No network, account, or data access", license: "1 user · commercial use", updatesPolicy: "12 months included", refundPolicy: "14 days if not downloaded",
     } : { benefits: [], installationSteps: [], previewFiles: [] };
     await prisma.marketplaceProduct.upsert({
-      where: { slug: product.slug }, update: {}, create: {
+      where: { slug: product.slug }, update: {
+        name: product.name, type: product.type, outcome: product.outcome, description: product.description,
+        priceMinor: product.pricing.amount * 100, currency: product.pricing.currency, pricingModel: product.pricing.model,
+        platforms: [...product.compatibility.platforms], models: [...product.compatibility.models], rating: product.rating,
+        reviewCount: product.reviewCount, usageCount: product.usageCount, version: product.version,
+        featured: product.featured ?? false, trending: product.trending ?? false, verified: product.verified, tags: product.tags,
+        creatorId: marketplaceCreatorIds.get(product.creator.handle)!, categoryId: marketplaceCategoryIds.get(product.category)!,
+        published: true, updatedAt: new Date(product.updatedAt), ...productDetails,
+      }, create: {
         id: product.id, slug: product.slug, name: product.name, type: product.type, outcome: product.outcome,
         description: product.description, priceMinor: product.pricing.amount * 100, currency: product.pricing.currency,
         pricingModel: product.pricing.model, platforms: [...product.compatibility.platforms], models: [...product.compatibility.models],
         rating: product.rating, reviewCount: product.reviewCount, usageCount: product.usageCount, version: product.version,
         featured: product.featured ?? false, trending: product.trending ?? false, verified: product.verified, tags: product.tags,
         creatorId: marketplaceCreatorIds.get(product.creator.handle)!, categoryId: marketplaceCategoryIds.get(product.category)!,
-        updatedAt: new Date(product.updatedAt), ...productDetails,
+        updatedAt: new Date(product.updatedAt), published: true, ...productDetails,
       },
     });
   }

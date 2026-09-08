@@ -13,10 +13,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ## Bug Audit — 2026-08-27
 
-### High Priority
-
-- Make admin authentication work when frontend and API use different hostnames; the API host-only session cookie is currently unavailable to the frontend proxy.
-
 ### Medium Priority
 
 - Render the homepage `featured` article or keep it in `latest`; the current destructuring silently drops the newest article and displays nothing when only one article exists.
@@ -41,11 +37,6 @@ This file tracks known improvement work that has not been completed yet. When an
 - Make logout idempotent so expired or invalid session cookies can still be cleared.
 
 ## Bug Audit — 2026-09-02
-
-### High Priority
-
-- Populate the marketplace catalog; `MarketplaceProduct`, `MarketplaceCreator` and `MarketplaceCategory` are all empty, so `/explore` correctly reports zero products and the homepage rails render nothing.
-- Make the API base URL runtime-configurable through a route handler or runtime config so the `/backend` rewrite destination is not frozen into `.next/routes-manifest.json` at build time and can no longer drift from the deployed API.
 
 ### Medium Priority
 
