@@ -31,7 +31,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Localize `features/discovery/`, the only feature with hard-coded English strings and no entries in `lib/i18n.ts`; its error, empty-state and filter copy stays English on Persian pages.
 - Localize the footer column headings and link labels, which bypass `t` entirely and remain English in Persian mode.
 - Point the footer links at their real destinations; all nine currently resolve to `/explore`.
 - Give the `Read the creator guide` button in the homepage `#creators` section an `href` or handler; it is presently a `<button>` that does nothing when clicked.
