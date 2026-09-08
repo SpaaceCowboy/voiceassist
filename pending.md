@@ -13,9 +13,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ## Bug Audit — 2026-08-27
 
-### Medium Priority
-
-
 ### Lower Priority
 
 - Replace the 200-article admin edit lookup and edition-selection cap with direct article lookup and paginated/searchable selection.
@@ -28,9 +25,6 @@ This file tracks known improvement work that has not been completed yet. When an
 - Make logout idempotent so expired or invalid session cookies can still be cleared.
 
 ## Bug Audit — 2026-09-02
-
-### Medium Priority
-
 
 ### Lower Priority
 
