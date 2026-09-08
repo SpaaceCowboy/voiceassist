@@ -15,7 +15,6 @@ This file tracks known improvement work that has not been completed yet. When an
 
 ### Medium Priority
 
-- Validate admin sessions rather than checking only for cookie presence, and redirect stale sessions to login instead of rendering a backend 401 as a frontend error.
 - Convert only genuine backend 404 responses to `notFound()` on article and series pages; propagate network and server failures as retryable errors.
 - Make seed reruns preserve administrator credentials, editorial taxonomy changes, and edition ordering unless an explicit reset is requested.
 
